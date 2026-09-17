@@ -810,3 +810,115 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --- editor: selection properties, minimap, pickers ---------------------- */
+
+.editor__stage { position: relative; }
+
+.editor__props {
+  position: absolute;
+  left: 18px;
+  bottom: 44px;
+  width: 268px;
+  max-height: calc(100% - 80px);
+  overflow-y: auto;
+  display: none;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(12, 16, 26, 0.96);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+.editor__props.is-open { display: grid; }
+.editor__props-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.prop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.prop { display: grid; gap: 4px; }
+.prop__label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); }
+.prop__hint { margin: 0; font-size: 0.68rem; color: var(--text-faint); line-height: 1.5; }
+.prop__actions { display: flex; gap: 6px; margin-top: 4px; }
+.prop__actions .btn { flex: 1; }
+
+.input--sm { padding: 6px 9px; font-size: 0.8rem; border-radius: 8px; }
+.icon-btn--sm { width: 26px; height: 26px; font-size: 1rem; }
+
+.color-input {
+  width: 100%;
+  height: 34px;
+  padding: 2px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+/* The sidebar now carries five tool groups, so it needs to breathe. */
+.editor__side { gap: 16px; }
+.editor__group { gap: 8px; }
+.tool-grid { gap: 5px; }
+.tool { padding: 8px 5px; gap: 5px; }
+.tool__swatch { width: 16px; height: 16px; }
+.tool__label { font-size: 0.58rem; }
+
+/* --- HUD: ability readouts ---------------------------------------------- */
+
+.hud__abilities { display: flex; gap: 6px; flex-wrap: wrap; }
+.pip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(5, 6, 10, 0.72);
+  color: var(--text-faint);
+}
+.pip.is-ready { color: var(--text); border-color: var(--line-strong); }
+.pip--air.is-ready { color: #e2e8f0; border-color: rgba(226, 232, 240, 0.55); }
+.pip--dive.is-ready { color: var(--green); border-color: rgba(6, 193, 103, 0.5); }
+.pip--slide.is-ready { color: #94a3b8; border-color: rgba(148, 163, 184, 0.5); }
+.pip--boost.is-ready { color: #fb923c; border-color: rgba(251, 146, 60, 0.55); }
+
+.badge--shield { color: #22d3ee; }
+.badge--magnet { color: #f97316; }
+
+.charge-bar {
+  width: 100%;
+  height: 4px;
+  margin-top: 5px;
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.charge-bar__fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--green), var(--yellow));
+  border-radius: 999px;
+}
+.charge-bar__fill.is-full { background: var(--yellow); }
+
+/* Workshop cards: the title is an inline rename field. */
+.custom-card__title {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 5px 7px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.custom-card__title:hover { border-color: var(--line); }
+.custom-card__title:focus { border-color: var(--green); outline: none; background: var(--bg-sunken); }

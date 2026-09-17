@@ -246,8 +246,12 @@ test('doors are solid while closed and passable while open', () => {
 
 // --- food ------------------------------------------------------------------
 
-/** Clicks at a world point, mirroring how the canvas maps pointer coords. */
-function clickWorld(game, canvas, worldX, worldY) {
+/**
+ * Throws at a world point, mirroring how the canvas maps pointer coords.
+ * Press starts the wind-up and release lets go, so a throw needs both.
+ * `chargeFrames` holds the button down to build power first.
+ */
+function throwAt(game, canvas, worldX, worldY, chargeFrames = 0) {
   const event = {
     clientX: worldX - game.camera.x,
     clientY: worldY - game.camera.y,
@@ -255,6 +259,8 @@ function clickWorld(game, canvas, worldX, worldY) {
   };
   canvas.dispatch('pointermove', event);
   canvas.dispatch('pointerdown', event);
+  if (chargeFrames) advance(chargeFrames);
+  canvas.dispatch('pointerup', event);
 }
 
 test('throwing releases the bag and hitting a surface loses the run', () => {
@@ -262,7 +268,7 @@ test('throwing releases the bag and hitting a surface loses the run', () => {
   advance(60);
   assert.equal(game.player.hasFood, true);
 
-  clickWorld(game, canvas, game.player.x + 300, game.player.y);
+  throwAt(game, canvas, game.player.x + 300, game.player.y);
   assert.equal(game.player.hasFood, false, 'throw should release the bag');
   assert.equal(game.food.airborne, true);
 
@@ -274,7 +280,7 @@ test('the bag can be caught back out of the air', () => {
   const { game, canvas, events } = boot();
   advance(60);
   // Throw straight up so it falls back into the catch radius.
-  clickWorld(game, canvas, game.player.x + 16, game.player.y - 400);
+  throwAt(game, canvas, game.player.x + 16, game.player.y - 400);
   assert.equal(game.player.hasFood, false);
 
   advance(200);

@@ -4,7 +4,7 @@
 // matter what the display refresh rate is, so a 144Hz monitor no longer makes
 // the player move 2.4x faster than a 60Hz one.
 
-import { PHYSICS, COLORS, SIM_STEP, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
+import { PHYSICS, COLORS, POWERUP_BY_ID, SIM_STEP, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
 import { prepareLevel, isSolidType, clamp } from './level.js';
 import { audio } from '../services/audio.js';
 
@@ -54,6 +54,8 @@ export class Game {
     this.aim = { x: this.level.startPos.x + 160, y: this.level.startPos.y };
     this.pointerInside = false;
     this.recentCatchAt = -Infinity; // gameplay ms of the last mid-air catch
+    this.charging = false;          // mouse held: winding up a throw
+    this.charge = 0;                // frames of wind-up so far
 
     this.#resetEntities();
     this.#bindInput();
@@ -80,10 +82,17 @@ export class Game {
       diveCooldown: 0,
       wallSliding: false,
       wallDir: 0,
+      wallStick: 0,
+      wallLock: 0,
       coyote: 0,
       jumpBuffer: 0,
+      airJumps: PHYSICS.airJumps,
+      crouching: false,
       vehicle: null,
-      buffs: { speed: 0, jump: 0 },
+      boost: 0,
+      boostCharge: 0,
+      invuln: 0,
+      buffs: { speed: 0, jump: 0, shield: 0, magnet: 0 },
       wallSlideCredited: false,
     };
     this.food = {
@@ -94,6 +103,7 @@ export class Game {
       size: FOOD_SIZE,
       airborne: false,
       catchCooldown: 0,
+      magnetised: false,
     };
     this.camera = {
       x: clamp(start.x - VIEW_W / 2, 0, Math.max(0, this.level.width - VIEW_W)),
@@ -162,11 +172,20 @@ export class Game {
         y: (event.clientY - rect.top) * (VIEW_H / rect.height) + this.camera.y,
       };
     };
+    // Press and hold charges the throw; releasing lets it go. A quick click is
+    // simply a zero-charge throw, so the old one-click behaviour still works.
     this.onPointerDown = event => {
       event.preventDefault();
       audio.unlock();
       this.onPointerMove(event);
+      if (this.player.hasFood) this.charging = true;
+    };
+    this.onPointerUp = event => {
+      if (!this.charging) return;
+      this.onPointerMove(event);
       this.#throwFood();
+      this.charging = false;
+      this.charge = 0;
     };
     this.onPointerLeave = () => { this.pointerInside = false; };
 
@@ -175,7 +194,11 @@ export class Game {
     addEventListener('blur', this.onBlur);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    // Releasing outside the canvas must still fire the throw, or the bag would
+    // stay stuck to your hand with the charge ring spinning.
+    addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('contextmenu', this.#preventDefault);
   }
 
@@ -187,7 +210,9 @@ export class Game {
     removeEventListener('blur', this.onBlur);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('contextmenu', this.#preventDefault);
   }
 
@@ -319,64 +344,125 @@ export class Game {
     const buffSpeed = p.buffs.speed > 0 ? PHYSICS.speedBuff : 1;
     const buffJump = p.buffs.jump > 0 ? PHYSICS.jumpBuff : 1;
 
-    if (p.buffs.speed > 0) p.buffs.speed--;
-    if (p.buffs.jump > 0) p.buffs.jump--;
+    // --- timers ---
+    for (const key of ['speed', 'jump', 'shield', 'magnet']) {
+      if (p.buffs[key] > 0) p.buffs[key]--;
+    }
     if (p.slideCooldown > 0) p.slideCooldown--;
     if (p.diveCooldown > 0) p.diveCooldown--;
     if (p.coyote > 0) p.coyote--;
     if (p.jumpBuffer > 0) p.jumpBuffer--;
+    if (p.wallLock > 0) p.wallLock--;
+    if (p.invuln > 0) p.invuln--;
+    if (p.boost > 0) p.boost--;
+    if (p.boostCharge > 0) p.boostCharge--;
     if (p.diveTimer > 0 && --p.diveTimer === 0) p.diving = false;
+    if (this.charging && p.hasFood) {
+      this.charge = Math.min(PHYSICS.throwChargeFrames, this.charge + 1);
+    }
 
-    const inVehicle = p.vehicle !== null;
-    const vehicleTuning = inVehicle ? PHYSICS[p.vehicle.type] : null;
+    const vehicle = p.vehicle;
+    const tuning = vehicle ? PHYSICS[vehicle.type] : null;
+    const boosting = p.boost > 0;
 
-    // Empty hands are faster — that's the reward for risking the throw.
+    // Empty hands are faster — that is the reward for risking the throw.
     const handsBonus = p.hasFood ? 1 : PHYSICS.emptyHandBonus;
-    const baseSpeed = (vehicleTuning?.speed ?? PHYSICS.moveSpeed)
-      * phys.moveSpeedScale * buffSpeed * handsBonus;
+    const baseSpeed = (tuning?.speed ?? PHYSICS.moveSpeed)
+      * phys.moveSpeedScale * buffSpeed * handsBonus
+      * (boosting ? (tuning?.boost ?? 1.4) : 1);
 
-    // Horizontal intent
     const left = this.#held('ArrowLeft', 'KeyA');
     const right = this.#held('ArrowRight', 'KeyD');
+    const steer = (right ? 1 : 0) - (left ? 1 : 0);
+    const jumpHeld = this.#held('Space', 'ArrowUp', 'KeyW');
 
+    // --- vehicle boost ---
+    if (this.#justPressed('ShiftLeft', 'ShiftRight') && vehicle
+        && p.boost <= 0 && p.boostCharge <= 0) {
+      p.boost = PHYSICS.boostFrames;
+      p.boostCharge = PHYSICS.boostRecharge;
+      this.#bump('boosts');
+      audio.vehicle();
+      this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 14, COLORS.car);
+    }
+
+    // --- horizontal movement ---
     if (p.sliding) {
       p.slideTimer--;
-      p.vx *= 0.96;
-      if (p.slideTimer <= 0 || !p.grounded) {
-        p.sliding = false;
-        p.height = PLAYER_H;
-        p.y -= PLAYER_H - SLIDE_H; // grow back upward from the same feet position
-        p.vx = clamp(p.vx, -baseSpeed, baseSpeed);
-      }
+      p.vx *= PHYSICS.slideDecay;
+      // Steering against a slide cuts it short; with it, it rides out.
+      if (steer !== 0 && Math.sign(steer) !== Math.sign(p.vx)) p.slideTimer -= 2;
+      if (p.slideTimer <= 0 || !p.grounded) this.#tryStandUp(baseSpeed);
     } else if (!p.diving) {
-      if (right && !left) { p.vx = baseSpeed; p.facingRight = true; }
-      else if (left && !right) { p.vx = -baseSpeed; p.facingRight = false; }
-      else p.vx *= phys.friction;
+      const control = p.grounded ? 1 : PHYSICS.airControl;
+      const lock = p.wallLock > 0 ? 0.25 : 1; // don't cancel a wall kick instantly
+      if (steer !== 0) {
+        const target = steer * baseSpeed;
+        p.vx += (target - p.vx) * control * lock;
+        p.facingRight = steer > 0;
+      } else if (p.grounded) {
+        p.vx *= phys.friction;
+      } else {
+        p.vx *= 0.985; // air momentum is kept; only the ground really slows you
+      }
     }
 
     p.vx += phys.windX;
+    p.vx = clamp(p.vx, -PHYSICS.maxSpeedX, PHYSICS.maxSpeedX);
     if (Math.abs(p.vx) < 0.05) p.vx = 0;
 
-    // Slide (crouch dash)
+    // --- start a slide ---
     if (this.#justPressed('ArrowDown', 'KeyS') && p.grounded && !p.sliding
-        && p.slideCooldown <= 0 && !inVehicle) {
+        && p.slideCooldown <= 0 && !vehicle) {
       p.sliding = true;
       p.slideTimer = PHYSICS.slideFrames;
       p.slideCooldown = PHYSICS.slideCooldown;
-      p.vx = (p.facingRight ? 1 : -1) * PHYSICS.slideSpeed * phys.moveSpeedScale * buffSpeed;
+      const dir = steer !== 0 ? steer : (p.facingRight ? 1 : -1);
+      const launch = PHYSICS.slideSpeed * phys.moveSpeedScale * buffSpeed;
+      // A slide keeps whichever is faster: your run-up or the slide's own kick.
+      p.vx = dir * Math.max(launch, Math.abs(p.vx) * 1.15);
+      p.facingRight = dir > 0;
       p.y += PLAYER_H - SLIDE_H;
       p.height = SLIDE_H;
       this.#bump('totalSlides');
       audio.slide();
+      this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 6, '#94a3b8');
     }
 
-    // Jump — edge-triggered, with coyote time and an input buffer. Holding the
-    // key no longer bunny-hops you up the level.
+    // --- jump, in priority order: wall kick, long jump, ground, air ---
     if (this.#justPressed('Space', 'ArrowUp', 'KeyW')) p.jumpBuffer = PHYSICS.jumpBufferFrames;
 
-    const jumpForce = (vehicleTuning?.jump ?? PHYSICS.jumpForce) * phys.jumpForceScale * buffJump;
+    const jumpForce = (tuning?.jump ?? PHYSICS.jumpForce) * phys.jumpForceScale * buffJump;
+
     if (p.jumpBuffer > 0) {
-      if (p.grounded || p.coyote > 0) {
+      if ((p.wallSliding || p.wallStick > 0) && phys.wallSlideEnabled && !vehicle) {
+        // Wall kick, which also refunds the air jump — a wall is a renewable
+        // source of height.
+        p.vy = PHYSICS.wallJump.y * phys.jumpForceScale * buffJump;
+        p.vx = -p.wallDir * PHYSICS.wallJump.x;
+        p.facingRight = p.wallDir < 0;
+        p.wallSliding = false;
+        p.wallStick = 0;
+        p.wallLock = PHYSICS.wallJumpLockFrames;
+        p.airJumps = PHYSICS.airJumps;
+        p.jumpBuffer = 0;
+        this.#bump('totalJumps');
+        this.#bump('wallJumps');
+        audio.wallJump();
+        this.#spawnParticles(p.x + (p.wallDir > 0 ? p.width : 0), p.y + p.height / 2, 8, '#cbd5e1');
+      } else if (p.sliding && p.grounded) {
+        // Long jump: trade the slide's momentum for distance.
+        p.vx *= PHYSICS.longJump.x;
+        p.vy = PHYSICS.longJump.y * phys.jumpForceScale * buffJump;
+        this.#endSlide();
+        p.grounded = false;
+        p.groundPlatform = null;
+        p.jumpBuffer = 0;
+        this.#bump('totalJumps');
+        this.#bump('longJumps');
+        audio.jump();
+        this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 10, this.skin.color);
+      } else if (p.grounded || p.coyote > 0) {
         p.vy = jumpForce;
         p.grounded = false;
         p.coyote = 0;
@@ -384,49 +470,79 @@ export class Game {
         p.groundPlatform = null;
         this.#bump('totalJumps');
         audio.jump();
-      } else if (p.wallSliding && phys.wallSlideEnabled) {
-        p.vy = PHYSICS.wallJump.y * phys.jumpForceScale * buffJump;
-        p.vx = -p.wallDir * PHYSICS.wallJump.x;
-        p.facingRight = p.wallDir < 0;
-        p.wallSliding = false;
+      } else if (p.airJumps > 0 && !vehicle) {
+        // Air jump. Steering while using it redirects you rather than only
+        // adding height, which is what makes it good for course correction.
+        p.airJumps--;
+        p.vy = PHYSICS.airJumpForce * phys.jumpForceScale * buffJump;
+        if (steer !== 0) p.vx += steer * PHYSICS.airJumpSteer;
         p.jumpBuffer = 0;
+        p.diving = false;
         this.#bump('totalJumps');
-        this.#bump('wallJumps');
-        audio.wallJump();
+        this.#bump('airJumps');
+        audio.jump();
+        this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 12, '#e2e8f0');
       }
     }
 
     // Variable jump height: releasing early cuts the arc short.
-    if (p.vy < 0 && !this.#held('Space', 'ArrowUp', 'KeyW')) p.vy *= 0.86;
+    if (p.vy < 0 && !jumpHeld) p.vy *= 0.86;
 
-    // Aimed dive
-    if (this.#justPressed('KeyE') && p.diveCooldown <= 0 && !inVehicle && !p.grounded) {
+    // --- dive (now usable from the ground too) ---
+    if (this.#justPressed('KeyE') && p.diveCooldown <= 0 && !vehicle) {
       const dx = this.aim.x - (p.x + p.width / 2);
       const dy = this.aim.y - (p.y + p.height / 2);
       const dist = Math.hypot(dx, dy);
       if (dist > 1) {
+        if (p.sliding) this.#endSlide();
         p.vx = (dx / dist) * PHYSICS.diveSpeed;
         p.vy = (dy / dist) * PHYSICS.diveSpeed;
+        p.facingRight = dx > 0;
         p.diving = true;
-        p.diveTimer = 14;
+        p.diveTimer = PHYSICS.diveFrames;
         p.diveCooldown = PHYSICS.diveCooldown;
+        p.grounded = false;
+        p.coyote = 0;
         this.#bump('totalDives');
         audio.dive();
-        this.#spawnParticles(p.x + p.width / 2, p.y + p.height / 2, 8, this.skin.color);
+        this.#spawnParticles(p.x + p.width / 2, p.y + p.height / 2, 10, this.skin.color);
       }
     }
 
-    // Leave a vehicle
-    if (this.#justPressed('KeyQ') && inVehicle) this.#exitVehicle();
+    if (this.#justPressed('KeyQ') && vehicle) this.#exitVehicle();
 
-    // Gravity
-    p.vy += PHYSICS.gravity * phys.gravityScale;
+    // --- gravity ---
+    // A dive holds its line; full gravity would turn every dive into a dud.
+    const gravityScale = p.diving ? PHYSICS.diveGravityScale : 1;
+    p.vy += PHYSICS.gravity * phys.gravityScale * gravityScale;
+
     const terminal = p.wallSliding ? PHYSICS.wallSlideSpeed : PHYSICS.terminalVelocity;
     if (p.vy > terminal) p.vy = terminal;
 
+    const wasDiving = p.diving;
+    const impactSpeed = Math.hypot(p.vx, p.vy);
+    const wasAirborne = !p.grounded;
+
     this.#moveAndCollide(p);
 
-    // Ride moving platforms
+    // Dive bounce: land a fast dive and rebound instead of splatting.
+    if (wasDiving && p.grounded && wasAirborne && impactSpeed >= PHYSICS.diveBounceMinSpeed) {
+      p.vy = PHYSICS.diveBounce * phys.jumpForceScale;
+      p.grounded = false;
+      p.groundPlatform = null;
+      p.diving = false;
+      p.diveTimer = 0;
+      p.diveCooldown = Math.min(p.diveCooldown, 10); // reward the read
+      this.#bump('diveBounces');
+      audio.wallJump();
+      this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 14, this.skin.color);
+      this.shake = this.reducedFlash ? 2 : 6;
+    }
+
+    // Landing refills the air jump.
+    if (p.grounded) p.airJumps = PHYSICS.airJumps;
+
+    // Ride moving platforms and conveyors.
     if (p.grounded && p.groundPlatform) {
       p.x += p.groundPlatform.deltaX;
       p.y += p.groundPlatform.deltaY;
@@ -437,20 +553,47 @@ export class Game {
       }
     }
 
-    // Keep the player inside the level bounds horizontally.
     p.x = clamp(p.x, 0, this.level.width - p.width);
 
-    // Re-read p.vehicle rather than the `inVehicle` snapshot above: pressing Q
-    // earlier in this same step may already have dismounted.
+    // Re-read p.vehicle rather than the snapshot above: pressing Q earlier in
+    // this same step may already have dismounted.
     if (p.vehicle) {
       p.vehicle.x = p.x - (p.vehicle.width - p.width) / 2;
       p.vehicle.y = p.y + p.height - p.vehicle.height;
     }
 
-    // Fell out of the world
-    if (p.y > this.level.height + 400) {
-      this.#kill('FELL');
+    if (p.y > this.level.height + 400) this.#kill('FELL');
+  }
+
+  /**
+   * Ends a slide, restoring full height only when there is headroom. Without
+   * this the player grows into any low ceiling and gets shoved back out by
+   * collision, which makes crawl tunnels unusable as level geometry.
+   */
+  #tryStandUp(speedCap = PHYSICS.moveSpeed) {
+    const p = this.player;
+    const standing = { x: p.x, y: p.y - (PLAYER_H - SLIDE_H), width: p.width, height: PLAYER_H };
+    const blocked = this.#solidPlatforms().some(plat => !plat.oneWay && overlaps(standing, plat));
+
+    if (blocked) {
+      p.crouching = true;
+      p.slideTimer = Math.max(p.slideTimer, 1); // stay crouched, keep crawling
+      p.vx = clamp(p.vx, -speedCap, speedCap);
+      return false;
     }
+    this.#endSlide();
+    p.vx = clamp(p.vx, -speedCap * 1.4, speedCap * 1.4);
+    return true;
+  }
+
+  #endSlide() {
+    const p = this.player;
+    if (!p.sliding) return;
+    p.sliding = false;
+    p.crouching = false;
+    p.slideTimer = 0;
+    p.y -= PLAYER_H - SLIDE_H; // grow back upward from the same feet position
+    p.height = PLAYER_H;
   }
 
   /**
@@ -461,6 +604,7 @@ export class Game {
     const solids = this.#solidPlatforms();
 
     // --- X ---
+    const maxX = Math.max(0, this.level.width - p.width);
     const stepsX = Math.max(1, Math.ceil(Math.abs(p.vx) / 8));
     const incX = p.vx / stepsX;
     for (let i = 0; i < stepsX; i++) {
@@ -473,6 +617,14 @@ export class Game {
         p.vx = 0;
         break;
       }
+    }
+
+    // Keep the player inside the world *before* resolving Y. Pushed far enough
+    // out by wind or a conveyor, they would otherwise spend the vertical pass
+    // beyond the end of the floor and fall straight through it.
+    if (p.x < 0 || p.x > maxX) {
+      p.x = clamp(p.x, 0, maxX);
+      p.vx = 0;
     }
 
     // --- Y ---
@@ -517,31 +669,52 @@ export class Game {
   }
 
   #updateWallSlide(p, solids) {
+    const wasWallSliding = p.wallSliding;
     p.wallSliding = false;
-    p.wallDir = 0;
-    if (!this.level.physics.wallSlideEnabled || p.grounded || p.vy < 0 || p.vehicle) return;
 
+    if (p.wallStick > 0) p.wallStick--;
+
+    if (!this.level.physics.wallSlideEnabled || p.grounded || p.vehicle || p.sliding) {
+      p.wallStick = 0;
+      p.wallDir = 0;
+      return;
+    }
+
+    // Detect a wall on either side without requiring the player to hold into
+    // it. Holding still biases the choice, so a deliberate press wins when
+    // there are walls on both sides of a shaft.
     const pressingRight = this.#held('ArrowRight', 'KeyD');
     const pressingLeft = this.#held('ArrowLeft', 'KeyA');
-    if (!pressingRight && !pressingLeft) return;
+    const order = pressingRight ? [1, -1] : pressingLeft ? [-1, 1] : [p.facingRight ? 1 : -1, p.facingRight ? -1 : 1];
 
-    const probe = { x: p.x + (pressingRight ? 3 : -3), y: p.y, width: p.width, height: p.height };
-    for (const plat of solids) {
-      if (plat.oneWay) continue;
-      if (!overlaps(probe, plat)) continue;
+    for (const dir of order) {
+      const probe = { x: p.x + dir * 4, y: p.y, width: p.width, height: p.height };
+      const touching = solids.some(plat => !plat.oneWay && overlaps(probe, plat));
+      if (!touching) continue;
+
+      p.wallDir = dir;
+      // Pushing away from the wall lets go of it, so you can always leave.
+      const pushingAway = (dir > 0 && pressingLeft) || (dir < 0 && pressingRight);
+      if (pushingAway) { p.wallStick = 0; return; }
+
       p.wallSliding = true;
-      p.wallDir = pressingRight ? 1 : -1;
-      p.facingRight = pressingRight;
+      p.facingRight = dir > 0;
+      // A short stick at the apex gives you time to aim the kick.
+      if (!wasWallSliding) p.wallStick = PHYSICS.wallStickFrames;
       if (p.vy > PHYSICS.wallSlideSpeed) p.vy = PHYSICS.wallSlideSpeed;
+      if (p.wallStick > 0 && p.vy > 0) p.vy = 0;
+
       if (!p.wallSlideCredited) {
         p.wallSlideCredited = true;
         this.#bump('wallSlides');
       }
-      if (Math.random() < 0.3) {
-        this.#spawnParticles(p.x + (p.wallDir > 0 ? p.width : 0), p.y + p.height * 0.6, 1, '#94a3b8');
+      if (!this.reducedFlash && Math.random() < 0.35) {
+        this.#spawnParticles(p.x + (dir > 0 ? p.width : 0), p.y + p.height * 0.6, 1, '#94a3b8');
       }
       return;
     }
+
+    p.wallDir = 0;
   }
 
   // --- food ----------------------------------------------------------------
@@ -557,15 +730,29 @@ export class Game {
     const dist = Math.hypot(dx, dy);
     if (dist < 1) return;
 
+    const power = this.throwPower();
     p.hasFood = false;
     this.food.airborne = true;
+    this.food.magnetised = false;
     this.food.x = originX - FOOD_SIZE / 2;
     this.food.y = originY - FOOD_SIZE / 2;
-    this.food.vx = (dx / dist) * PHYSICS.throwStrength + p.vx * 0.4;
-    this.food.vy = (dy / dist) * PHYSICS.throwStrength;
+    this.food.vx = (dx / dist) * power + p.vx * 0.4;
+    this.food.vy = (dy / dist) * power;
     this.food.catchCooldown = PHYSICS.catchCooldown;
+
     this.#bump('foodThrown');
+    if (this.charge >= PHYSICS.throwChargeFrames) this.#bump('chargedThrows');
     audio.throwFood();
+    this.#spawnParticles(originX, originY, 4 + Math.round(this.chargeRatio() * 8), COLORS.food);
+  }
+
+  /** 0..1 — how far the current throw charge has wound up. */
+  chargeRatio() {
+    return Math.min(1, this.charge / PHYSICS.throwChargeFrames);
+  }
+
+  throwPower() {
+    return PHYSICS.throwStrength * (1 + this.chargeRatio() * PHYSICS.throwChargeBonus);
   }
 
   #stepFood() {
@@ -590,11 +777,26 @@ export class Game {
     } else {
       const dx = (p.x + p.width / 2) - (f.x + f.size / 2);
       const dy = (p.y + p.height / 2) - (f.y + f.size / 2);
-      if (Math.hypot(dx, dy) < PHYSICS.catchRadius) {
+      const distance = Math.hypot(dx, dy);
+
+      // A magnet reels the bag in from much further out, which turns a
+      // botched throw into a recoverable one.
+      const magnetActive = p.buffs.magnet > 0;
+      const reach = magnetActive ? PHYSICS.magnetCatchRadius : PHYSICS.catchRadius;
+      f.magnetised = magnetActive && distance < reach;
+      if (f.magnetised && distance > PHYSICS.catchRadius) {
+        const pull = 0.9;
+        f.vx += (dx / distance) * pull;
+        f.vy += (dy / distance) * pull;
+      }
+
+      if (distance < PHYSICS.catchRadius) {
         p.hasFood = true;
         f.airborne = false;
+        f.magnetised = false;
         this.recentCatchAt = this.elapsed;
         this.#bump('foodCaught');
+        if (magnetActive) this.#bump('magnetCatches');
         audio.catchFood();
         this.#spawnParticles(f.x + f.size / 2, f.y + f.size / 2, 6, COLORS.food);
         return;
@@ -623,8 +825,9 @@ export class Game {
 
     let x = originX;
     let y = originY;
-    let vx = (dx / dist) * PHYSICS.throwStrength + p.vx * 0.4;
-    let vy = (dy / dist) * PHYSICS.throwStrength;
+    const power = this.throwPower();
+    let vx = (dx / dist) * power + p.vx * 0.4;
+    let vy = (dy / dist) * power;
     const gravity = PHYSICS.foodGravity * this.level.physics.gravityScale;
     const points = [];
 
@@ -650,24 +853,21 @@ export class Game {
       if (pu.collected) continue;
       if (!overlaps(box, pu)) continue;
       pu.collected = true;
-      if (pu.type === 'speed') {
-        p.buffs.speed = PHYSICS.buffFrames;
-        this.#bump('speedPickups');
-      } else {
-        p.buffs.jump = PHYSICS.buffFrames;
-        this.#bump('jumpPickups');
-      }
+      this.#applyPowerup(pu.type);
+      const meta = POWERUP_BY_ID[pu.type];
       audio.pickup();
-      this.#spawnParticles(pu.x + pu.width / 2, pu.y + pu.height / 2, 12,
-        pu.type === 'speed' ? COLORS.buffSpeed : COLORS.buffJump);
+      this.#spawnParticles(pu.x + pu.width / 2, pu.y + pu.height / 2, 14, meta?.color ?? COLORS.food);
     }
 
     if (p.vehicle) return;
     for (const v of this.level.vehicles) {
-      if (v.spent || v.inUse) continue;
+      if (v.inUse) continue;
+      if (v.cooldown > 0) { v.cooldown--; continue; } // don't re-board instantly
       if (!overlaps(box, v)) continue;
       v.inUse = true;
       p.vehicle = v;
+      p.boost = 0;
+      p.boostCharge = 0;
       this.#bump(v.type === 'car' ? 'carRides' : 'bikeRides');
       audio.vehicle();
       this.#spawnParticles(v.x + v.width / 2, v.y, 10, v.type === 'car' ? COLORS.car : COLORS.bike);
@@ -675,12 +875,28 @@ export class Game {
     }
   }
 
+  #applyPowerup(type) {
+    const p = this.player;
+    switch (type) {
+      case 'speed':  p.buffs.speed = PHYSICS.buffFrames; break;
+      case 'jump':   p.buffs.jump = PHYSICS.buffFrames; break;
+      case 'shield': p.buffs.shield = PHYSICS.shieldFrames; break;
+      case 'magnet': p.buffs.magnet = PHYSICS.magnetFrames; break;
+      default: return;
+    }
+    const meta = POWERUP_BY_ID[type];
+    if (meta?.stat) this.#bump(meta.stat);
+  }
+
   #exitVehicle() {
     const p = this.player;
     if (!p.vehicle) return;
     p.vehicle.inUse = false;
-    p.vehicle.spent = true;
+    // Left where you abandoned it, and boardable again after a moment. The
+    // old build burned a vehicle permanently the first time you got off.
+    p.vehicle.cooldown = 45;
     p.vehicle = null;
+    p.boost = 0;
     p.vy = Math.min(p.vy, -8); // hop out
     audio.jump();
   }
@@ -729,6 +945,27 @@ export class Game {
 
   #kill(reason) {
     if (this.deathReason || this.finished) return; // only the first cause counts
+    const p = this.player;
+
+    // Brief grace after a shield pops, so one spike does not eat two charges.
+    if (p.invuln > 0) return;
+
+    // A shield absorbs anything except losing the bag — that is the one
+    // failure the delivery cannot come back from.
+    if (p.buffs.shield > 0 && reason !== 'DROPPED') {
+      p.buffs.shield = 0;
+      p.invuln = 48;
+      p.vy = Math.min(p.vy, -9);
+      p.vx = (p.facingRight ? -1 : 1) * 7; // knocked back out of the hazard
+      p.diving = false;
+      if (p.sliding) this.#endSlide();
+      this.shake = this.reducedFlash ? 3 : 10;
+      this.#bump('shieldsUsed');
+      audio.wallJump();
+      this.#spawnParticles(p.x + p.width / 2, p.y + p.height / 2, 20, COLORS.buffShield);
+      return;
+    }
+
     this.deathReason = reason;
     this.deathTimer = 520;
     this.shake = this.reducedFlash ? 4 : 18;
@@ -741,7 +978,7 @@ export class Game {
       CRUSHED: 'deathsByCrush',
     }[reason] ?? 'deathsByFall');
     audio.death();
-    this.#spawnParticles(this.player.x + PLAYER_W / 2, this.player.y + PLAYER_H / 2, 24, this.skin.color);
+    this.#spawnParticles(p.x + PLAYER_W / 2, p.y + PLAYER_H / 2, 24, this.skin.color);
     this.#flushStats();
   }
 
@@ -810,8 +1047,21 @@ export class Game {
       hasFood: p.hasFood,
       foodAirborne: this.food.airborne,
       dead: Boolean(this.deathReason),
-      buffs: { speed: p.buffs.speed, jump: p.buffs.jump },
+      buffs: {
+        speed: p.buffs.speed,
+        jump: p.buffs.jump,
+        shield: p.buffs.shield,
+        magnet: p.buffs.magnet,
+      },
       vehicle: p.vehicle?.type ?? null,
+      boost: p.boost,
+      boostReady: Boolean(p.vehicle) && p.boost <= 0 && p.boostCharge <= 0,
+      airJumps: p.airJumps,
+      maxAirJumps: PHYSICS.airJumps,
+      diveReady: p.diveCooldown <= 0,
+      slideReady: p.slideCooldown <= 0,
+      charge: this.chargeRatio(),
+      charging: this.charging,
       paused: this.paused,
     };
   }
@@ -1006,13 +1256,16 @@ export class Game {
   #drawPowerups(ctx) {
     for (const pu of this.level.powerups) {
       if (pu.collected) continue;
+      const meta = POWERUP_BY_ID[pu.type] ?? POWERUP_BY_ID.speed;
       const bob = Math.sin(this.worldTime / 260 + pu.x) * 5;
-      const color = pu.type === 'speed' ? COLORS.buffSpeed : COLORS.buffJump;
+      const cx = pu.x + pu.width / 2;
+      const cy = pu.y + pu.height / 2 + bob;
+
       ctx.save();
-      ctx.translate(pu.x + pu.width / 2, pu.y + pu.height / 2 + bob);
+      ctx.translate(cx, cy);
       ctx.rotate(this.worldTime / 700);
-      if (!this.reducedFlash) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
-      ctx.fillStyle = color;
+      if (!this.reducedFlash) { ctx.shadowColor = meta.color; ctx.shadowBlur = 14; }
+      ctx.fillStyle = meta.color;
       ctx.fillRect(-pu.width / 2, -pu.height / 2, pu.width, pu.height);
       ctx.restore();
 
@@ -1020,14 +1273,23 @@ export class Game {
       ctx.font = 'bold 15px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(pu.type === 'speed' ? '»' : '⇈', pu.x + pu.width / 2, pu.y + pu.height / 2 + bob);
+      ctx.fillText(meta.glyph, cx, cy);
+      ctx.textBaseline = 'alphabetic';
     }
   }
 
   #drawVehicles(ctx) {
     for (const v of this.level.vehicles) {
-      if (v.spent && !v.inUse) continue;
       const color = v.type === 'car' ? COLORS.car : COLORS.bike;
+      if (v.inUse && this.player.boost > 0 && !this.reducedFlash) {
+        // Exhaust plume behind a boosting vehicle.
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = '#fb923c';
+        const back = this.player.facingRight ? v.x - 18 : v.x + v.width;
+        ctx.fillRect(back, v.y + v.height * 0.3, 18, v.height * 0.4);
+        ctx.restore();
+      }
       ctx.fillStyle = v.inUse ? shade(color, 30) : color;
       ctx.fillRect(v.x, v.y, v.width, v.height);
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -1106,6 +1368,19 @@ export class Game {
     ctx.stroke();
     ctx.restore();
 
+    // Charge ring: fills as the throw winds up.
+    const charge = this.chargeRatio();
+    if (charge > 0.01) {
+      ctx.save();
+      ctx.strokeStyle = charge >= 1 ? '#fbbf24' : '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(this.aim.x, this.aim.y, 18, -Math.PI / 2, -Math.PI / 2 + charge * Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Line to the loose food so you never lose track of it off-screen.
     if (!p.hasFood) {
       ctx.save();
@@ -1174,6 +1449,12 @@ export class Game {
       ctx.restore();
     }
 
+    // Flicker while briefly invulnerable after a shield pops.
+    if (p.invuln > 0 && Math.floor(this.worldTime / 60) % 2 === 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+    }
+
     ctx.fillStyle = this.skin.color;
     ctx.fillRect(x, y, w, h);
 
@@ -1193,9 +1474,14 @@ export class Game {
       ctx.fillText('DASH', x + w / 2, y + 35);
     }
 
+    if (p.invuln > 0 && Math.floor(this.worldTime / 60) % 2 === 0) ctx.restore();
+
     if (p.wallSliding) {
       ctx.fillStyle = 'rgba(148,163,184,0.5)';
       ctx.fillRect(x + (p.wallDir > 0 ? w : -4), y + 6, 4, h - 12);
+      // Scrape marks so a wall cling reads at a glance.
+      ctx.fillStyle = 'rgba(226,232,240,0.28)';
+      ctx.fillRect(x + (p.wallDir > 0 ? w : -7), y + h * 0.75, 7, 3);
     }
 
     // Active buff ring
@@ -1205,6 +1491,44 @@ export class Game {
       ctx.lineWidth = 2;
       ctx.globalAlpha = 0.6 + Math.sin(this.worldTime / 120) * 0.25;
       ctx.strokeRect(x - 4, y - 4, w + 8, h + 8);
+      ctx.restore();
+    }
+
+    // Shield bubble
+    if (p.buffs.shield > 0) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.buffShield;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.5 + Math.sin(this.worldTime / 150) * 0.25;
+      if (!this.reducedFlash) { ctx.shadowColor = COLORS.buffShield; ctx.shadowBlur = 12; }
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + h / 2, Math.max(w, h) * 0.75, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Magnet reach, drawn only while the bag is loose and being pulled.
+    if (p.buffs.magnet > 0 && !p.hasFood) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.buffMagnet;
+      ctx.globalAlpha = 0.16;
+      ctx.setLineDash([6, 10]);
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + h / 2, PHYSICS.magnetCatchRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Air-jump pip: a small mark above the head while one is banked.
+    if (p.airJumps > 0 && !p.grounded && !p.vehicle) {
+      ctx.save();
+      ctx.fillStyle = '#e2e8f0';
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x + w / 2, y - 12);
+      ctx.lineTo(x + w / 2 - 5, y - 5);
+      ctx.lineTo(x + w / 2 + 5, y - 5);
+      ctx.fill();
       ctx.restore();
     }
   }

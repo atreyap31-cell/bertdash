@@ -6,13 +6,32 @@ let pendingFrame = null;
 
 const noop = () => {};
 
+// Long fuzz runs render tens of millions of canvas calls. Keeping them all
+// exhausts memory and takes the whole process down, so the log is a bounded
+// ring: recent calls for debugging, a total count for assertions.
+const MAX_RECORDED_CALLS = 2000;
+
 function makeContext() {
-  // Every canvas call the renderer makes, collected so a test can assert on
-  // draw activity without needing a real 2D context.
-  const calls = [];
-  const record = name => (...args) => { calls.push([name, args]); };
+  // Ring buffer, not a growing array with shift(): a long fuzz run makes tens
+  // of millions of draw calls, so both unbounded growth and an O(n) shift per
+  // call are enough to take the process down.
+  const calls = new Array(MAX_RECORDED_CALLS);
+  const counts = new Map();
+  let cursor = 0;
+  let total = 0;
+  const record = name => (...args) => {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    calls[cursor] = [name, args];
+    cursor = (cursor + 1) % MAX_RECORDED_CALLS;
+    total++;
+  };
   const ctx = {
-    calls,
+    counts,                              // name -> total times called
+    get callCount() { return total; },   // total draw calls made
+    /** The most recent calls, oldest first. */
+    recentCalls() {
+      return [...calls.slice(cursor), ...calls.slice(0, cursor)].filter(Boolean);
+    },
     canvas: { width: 800, height: 600 },
     globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
     font: '', textAlign: '', textBaseline: '', shadowColor: '', shadowBlur: 0,
@@ -29,13 +48,20 @@ function makeContext() {
   return ctx;
 }
 
-export function makeCanvas() {
+/**
+ * A canvas stub.
+ *
+ * `record: false` returns a context whose methods do nothing at all. Long fuzz
+ * runs make tens of millions of draw calls, and even bookkeeping that cheap
+ * dominates the run — the invariants being checked never look at the drawing.
+ */
+export function makeCanvas({ record = true } = {}) {
   const listeners = new Map();
   return {
     width: 800,
     height: 600,
     _ctx: null,
-    getContext() { this._ctx ??= makeContext(); return this._ctx; },
+    getContext() { this._ctx ??= (record ? makeContext() : makeNullContext()); return this._ctx; },
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 }),
     addEventListener: (type, fn) => { listeners.set(type, fn); },
     removeEventListener: type => { listeners.delete(type); },
@@ -48,6 +74,23 @@ export function makeCanvas() {
 }
 
 /** Installs the globals the engine touches. Call once per test file. */
+function makeNullContext() {
+  const ctx = {
+    canvas: { width: 800, height: 600 },
+    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
+    font: '', textAlign: '', textBaseline: '', shadowColor: '', shadowBlur: 0,
+    createLinearGradient: () => ({ addColorStop: noop }),
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+  };
+  for (const name of [
+    'save', 'restore', 'translate', 'rotate', 'scale',
+    'fillRect', 'strokeRect', 'clearRect', 'beginPath', 'closePath',
+    'moveTo', 'lineTo', 'arc', 'rect', 'fill', 'stroke', 'clip',
+    'fillText', 'setLineDash',
+  ]) ctx[name] = noop;
+  return ctx;
+}
+
 export function installGlobals() {
   const windowListeners = new Map();
   const store = new Map();

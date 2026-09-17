@@ -13,17 +13,29 @@ No install, no build step, no accounts. Progress is saved in your browser.
 | Key | Action |
 | --- | --- |
 | `A` `D` / `←` `→` | Move |
-| `Space` / `W` / `↑` | Jump (hold for height, press into a wall to wall-jump) |
-| `S` / `↓` | Slide |
-| `E` | Aimed dive, toward the cursor |
-| Click | Throw the bag toward the cursor — then catch it |
-| `Q` | Leave a bike or car |
+| `Space` / `W` / `↑` | Jump. Hold for height |
+| `Space` again in mid-air | **Air jump** — one per landing, steer while using it to redirect |
+| `Space` against a wall | **Wall kick** — launches you off and refunds the air jump |
+| `S` / `↓` | **Slide** — keeps your run-up speed and ducks under low ceilings |
+| `S` then `Space` | **Long jump** — trades the slide's momentum for distance |
+| `E` | **Dive** toward the cursor, from the ground or mid-air. Land one fast and it rebounds |
+| Hold click | **Charge a throw**, release to let the bag go. A dotted arc previews the landing |
+| `Shift` | **Boost** while riding a vehicle |
+| `Q` | Leave a vehicle (it stays where you left it, and can be re-boarded) |
 | `R` | Restart the level |
 | `Esc` / `P` | Pause |
 
 Throwing the bag is the risk/reward mechanic: your hands are free so you move
 faster, but if the bag touches anything before you catch it, the delivery fails.
-A dotted arc previews where it will land.
+
+### Pickups
+
+| Pickup | Effect |
+| --- | --- |
+| Speed | Faster movement for a while |
+| Jump | Higher jumps for a while |
+| Shield | Absorbs one lethal hazard — but never a dropped bag |
+| Magnet | Reels a loose bag back in from three times the usual range |
 
 ## Running it locally
 
@@ -42,10 +54,20 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-37 tests covering the physics loop, every platform type, win/lose latching,
-profile persistence, achievement rules and the peer-code encoding. They run in
-plain Node against a small DOM stub in `tests/harness.mjs` — no browser or test
-framework needed.
+58 tests across four suites:
+
+- `engine` — the physics loop, every platform type, win/lose latching
+- `abilities` — one test per move, checking both that it works and that it
+  cannot be abused (no infinite air jumps, no free shields, no stuck crouch)
+- `fuzz` — drives all 34 levels with pseudo-random input across three seeds
+  (~61k simulated frames) and asserts the simulation never breaks its own
+  rules: no NaN, no escaping the level, no clipping into solid geometry
+- `profile` — save data, achievement rules, peer-code encoding
+
+They run in plain Node against a small DOM stub in `tests/harness.mjs` — no
+browser or test framework needed. Each file is run as its own process because
+running them together intermittently trips a V8 crash in the Node 24 test
+runner's child processes.
 
 ## Layout
 
@@ -72,6 +94,26 @@ js/
 tests/                node --test suites
 ```
 
+## The editor
+
+The workshop is a real level editor, not just a block stamper:
+
+- **Select** anything, shift-click to add, or drag a marquee over a region
+- **Edit properties** of the selection — position and size for everything, plus
+  speed and range for moving platforms, cycle and offset for lasers and doors,
+  belt speed for conveyors, and the kind of a powerup
+- **Undo/redo** (`Ctrl+Z` / `Ctrl+Shift+Z`), **copy/paste** (`Ctrl+C` / `Ctrl+V`),
+  **duplicate** (`Ctrl+D`), **select all** (`Ctrl+A`), `Delete` to remove
+- **Arrow keys** nudge by a grid cell, or by one pixel with `Shift`
+- **Drag out a rectangle** for terrain instead of clicking a hundred cells
+- **Zoom** with `Ctrl`+wheel, pan with the wheel or a right-drag, and a minimap
+  shows where you are in the level
+- **Place vehicles and powerups**, which the old editor could not do at all
+- **Tune the level's physics** — gravity, run speed, jump height, wind and wall
+  sliding — and these are now actually read by the engine
+- Levels are **validated** before saving, including a check that the start
+  marker is not buried inside a platform
+
 ## Notes on the rewrite
 
 This started as a single 160KB HTML file that loaded React, ReactDOM, Babel,
@@ -84,7 +126,7 @@ described moving platforms, vanishing platforms, lasers, doors, conveyors,
 vehicles, powerups and per-level physics; the old engine ignored all of it and
 drew those pieces as ordinary blocks. It now simulates them.
 
-Other substantive fixes:
+Substantive fixes:
 
 - **Frame-rate independence.** Physics ran once per `requestAnimationFrame`, so
   the player moved more than twice as fast on a 144Hz display. The loop now
@@ -98,20 +140,27 @@ Other substantive fixes:
 - **Jumping was not edge-triggered.** Holding the jump key bounced you
   continuously. Jumps now trigger on press, with coyote time and an input
   buffer.
-- **Wall sliding never activated,** so wall jumps were unreachable.
+- **Wall sliding never activated,** so wall jumps were unreachable. It now
+  engages without having to hold into the wall.
+- **The player could fall through the world.** A sustained sideways force could
+  push them outside the level bounds *during* the collision pass, where no floor
+  exists; the bounds clamp only ran afterwards.
+- **Standing up from a slide clipped through low ceilings.** The player now
+  stays crouched when there is no headroom, which is what makes crawl tunnels
+  usable as level geometry.
 - **The editor's Test button always crashed** — it called `onPlay`, which was
   never passed. The editor also could not scroll vertically, leaving everything
   below the top 600px of a 6000px level unreachable, and its physics sliders
   were saved but never read by the engine.
 - **`LZString` was `btoa`,** despite the name: no compression, not URL-safe, and
   it threw on any non-Latin1 character. Peer codes are now genuinely gzipped.
-- **Achievements were never awarded.** All 50 were unreachable. Every one now
-  has a rule that is actually evaluated, and the handful that referenced
-  features the game does not have were replaced.
+- **Achievements were never awarded.** All 50 were unreachable; there are now 61,
+  each with a rule that is actually evaluated.
 - Clicking a HUD button also threw the food, because pointer handlers were bound
   to the window rather than the canvas.
 - Progress was written to `localStorage` synchronously on every jump; it is now
-  debounced and flushed when the page is hidden.
+  debounced, and on a timer rather than `requestAnimationFrame`, which is paused
+  outright in a background tab.
 
 Saves from the old build are migrated automatically on first load.
 

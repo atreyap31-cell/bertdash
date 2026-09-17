@@ -4,7 +4,7 @@
 // lasers, doors, conveyors, vehicles and powerups. Preparing them here is what
 // lets the engine actually simulate them.
 
-import { PHYSICS, VIEW_W, VIEW_H } from '../data/config.js';
+import { PHYSICS, POWERUP_BY_ID, VIEW_W, VIEW_H } from '../data/config.js';
 
 // Authored ranges go up to 5000px. A platform that takes 20 seconds to come
 // back is not a platform you can plan around, so the sweep is capped to
@@ -113,14 +113,16 @@ function prepareVehicle(source) {
     height: source.height ?? (source.type === 'car' ? 40 : 34),
     velY: 0,
     inUse: false,
-    spent: false,
+    cooldown: 0, // brief lockout after dismounting, so Q doesn't re-board you
   };
 }
 
 function preparePowerup(source) {
   return {
     id: source.id,
-    type: source.type === 'speed' ? 'speed' : 'jump',
+    // Unknown kinds fall back to 'speed' so a hand-edited level cannot
+    // produce a pickup the engine silently ignores.
+    type: POWERUP_BY_ID[source.type] ? source.type : 'speed',
     x: source.pos.x,
     y: source.pos.y,
     width: source.width ?? 30,

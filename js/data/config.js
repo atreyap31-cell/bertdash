@@ -15,26 +15,75 @@ export const PHYSICS = {
   jumpForce: -15,
   moveSpeed: 7,
   terminalVelocity: 16,
-  coyoteFrames: 6,        // grace period after walking off an edge
-  jumpBufferFrames: 6,    // remembers a jump pressed just before landing
-  wallSlideSpeed: 2,
-  wallJump: { x: 10, y: -14 },
-  slideSpeed: 14,
-  slideFrames: 22,
-  slideCooldown: 55,
-  diveSpeed: 19,
-  diveCooldown: 45,
+  // Hard ceiling on horizontal speed. Wind, conveyors and vehicle boost all
+  // add to vx, and without a cap they can compound into speeds that tunnel
+  // straight through a platform between two sub-steps.
+  maxSpeedX: 34,
+  airControl: 0.78,       // steering authority kept mid-air
+  coyoteFrames: 7,        // grace period after walking off an edge
+  jumpBufferFrames: 7,    // remembers a jump pressed just before landing
+
+  // Air jump. Refunded on landing and on every wall kick, so a wall hands you
+  // a fresh one each time you push off it.
+  airJumps: 1,
+  airJumpForce: -13.2,
+  airJumpSteer: 2.2,      // sideways kick when you air-jump while steering
+
+  // Wall work. You no longer have to hold into the wall to cling to it, and a
+  // brief stick at the top gives you time to aim the kick.
+  wallSlideSpeed: 2.2,
+  wallStickFrames: 9,
+  wallJump: { x: 12.5, y: -15 },
+  wallJumpLockFrames: 8,  // steering damped briefly so the kick actually lands
+
+  // Slide, and the long jump that comes out of it.
+  slideSpeed: 16,
+  slideFrames: 26,
+  slideCooldown: 32,
+  slideDecay: 0.975,
+  longJump: { x: 1.42, y: -11.5 }, // multipliers applied to a slide's momentum
+
+  // Dive. Usable from the ground as well as the air; land one hard enough and
+  // it rebounds you instead of killing your momentum.
+  diveSpeed: 21,
+  diveFrames: 16,
+  diveCooldown: 32,
+  diveBounce: -11.5,
+  diveBounceMinSpeed: 8,
+  diveGravityScale: 0.35, // dives stay flat instead of drooping
+
+  // Throwing. Hold to charge for a longer throw.
   throwStrength: 9,
+  throwChargeFrames: 40,
+  throwChargeBonus: 0.9,  // +90% strength at full charge
   foodGravity: 0.28,
   catchRadius: 46,
-  catchCooldown: 14,
+  magnetCatchRadius: 132,
+  catchCooldown: 12,
   emptyHandBonus: 1.3,    // you move faster once the food is out of your hands
-  bike: { speed: 12, jump: -16 },
-  car: { speed: 17, jump: -11 },
+
+  // Vehicles. Boost with Shift; dismounting leaves them re-boardable.
+  bike: { speed: 13, jump: -16.5, boost: 1.5 },
+  car: { speed: 18, jump: -11.5, boost: 1.65 },
+  boostFrames: 80,
+  boostRecharge: 200,
+
   buffFrames: 420,
   speedBuff: 1.5,
   jumpBuff: 1.28,
+  shieldFrames: 900,      // a shield lasts until used, but not forever
+  magnetFrames: 600,
 };
+
+/** Powerup kinds the engine understands, and how they are presented. */
+export const POWERUP_TYPES = [
+  { id: 'speed',  label: 'Speed',  color: '#3b82f6', glyph: '»', stat: 'speedPickups' },
+  { id: 'jump',   label: 'Jump',   color: '#a855f7', glyph: '⇈', stat: 'jumpPickups' },
+  { id: 'shield', label: 'Shield', color: '#22d3ee', glyph: '◇', stat: 'shieldPickups' },
+  { id: 'magnet', label: 'Magnet', color: '#f97316', glyph: '◎', stat: 'magnetPickups' },
+];
+
+export const POWERUP_BY_ID = Object.fromEntries(POWERUP_TYPES.map(p => [p.id, p]));
 
 export const COLORS = {
   player: '#06C167',
@@ -52,6 +101,8 @@ export const COLORS = {
   car: '#38bdf8',
   buffSpeed: '#3b82f6',
   buffJump: '#a855f7',
+  buffShield: '#22d3ee',
+  buffMagnet: '#f97316',
   aim: 'rgba(255, 255, 255, 0.32)',
 };
 
@@ -96,6 +147,17 @@ export const ACHIEVEMENTS = [
   { id: 'wall_1',       title: 'Spider-Bert',    description: 'Slide down a wall',             icon: '⎷', check: p => p.stats.wallSlides >= 1 },
   { id: 'wall_50',      title: 'Parkour',        description: 'Wall slide 50 times',           icon: '⎷', check: p => p.stats.wallSlides >= 50 },
   { id: 'walljump_1',   title: 'Kick Off',       description: 'Perform a wall jump',           icon: '⇱', check: p => p.stats.wallJumps >= 1 },
+  { id: 'walljump_50',  title: 'Wall Rat',       description: 'Perform 50 wall jumps',         icon: '⇱', check: p => p.stats.wallJumps >= 50 },
+  { id: 'airjump_1',    title: 'Second Wind',    description: 'Use an air jump',               icon: '↑', check: p => p.stats.airJumps >= 1 },
+  { id: 'airjump_100',  title: 'Skywalker',      description: 'Use 100 air jumps',             icon: '↑', check: p => p.stats.airJumps >= 100 },
+  { id: 'longjump_1',   title: 'Broad Jumper',   description: 'Launch a long jump from a slide', icon: '↗', check: p => p.stats.longJumps >= 1 },
+  { id: 'longjump_25',  title: 'Triple Jumper',  description: 'Launch 25 long jumps',          icon: '↗', check: p => p.stats.longJumps >= 25 },
+  { id: 'bounce_1',     title: 'Rebound',        description: 'Bounce out of a dive',          icon: '↻', check: p => p.stats.diveBounces >= 1 },
+  { id: 'bounce_25',    title: 'Pinball',        description: 'Bounce out of 25 dives',        icon: '↻', check: p => p.stats.diveBounces >= 25 },
+  { id: 'charge_1',     title: 'Wind-up',        description: 'Land a fully charged throw',    icon: '◉', check: p => p.stats.chargedThrows >= 1 },
+  { id: 'shield_1',     title: 'Deflected',      description: 'Survive a hazard with a shield', icon: '◇', check: p => p.stats.shieldsUsed >= 1 },
+  { id: 'magnet_1',     title: 'Tractor Beam',   description: 'Reel the bag in with a magnet', icon: '◎', check: p => p.stats.magnetCatches >= 1 },
+  { id: 'boost_1',      title: 'Nitro',          description: 'Boost a vehicle',               icon: '≫', check: p => p.stats.boosts >= 1 },
   { id: 'skin_1',       title: 'Fashionista',    description: 'Buy a skin',                    icon: '◈', check: p => p.unlockedSkins.length >= 2 },
   { id: 'skin_5',       title: 'Wardrobe',       description: 'Unlock 5 skins',                icon: '◈', check: p => p.unlockedSkins.length >= 5 },
   { id: 'collector',    title: 'Collector',      description: 'Unlock every skin',             icon: '◈', check: p => p.unlockedSkins.length >= SKINS.length },

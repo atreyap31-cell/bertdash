@@ -1,11 +1,11 @@
 // In-game HUD. Reads live values from the engine each animation frame and
-// writes them straight into text nodes — no re-render, no diffing.
+// writes them straight into existing nodes — no re-render, no diffing.
 
 import { el, formatTime } from './dom.js';
 
 export class Hud {
   /**
-   * @param {object} options { levelLabel, levelTitle, best, onRestart, onMenu, onPause }
+   * @param {object} options { levelLabel, levelTitle, parTime, best, onRestart, onMenu, onPause }
    */
   constructor(options) {
     this.options = options;
@@ -17,7 +17,17 @@ export class Hud {
       return el('div.stat', [el('span.stat__label', label), value]);
     };
 
-    this.timeEl = null;
+    this.chargeFill = el('div.charge-bar__fill');
+
+    // Ability readouts. These exist so the new moves are discoverable: you can
+    // see at a glance whether the air jump is banked or the dive is cooling.
+    this.pips = {
+      air: el('div.pip.pip--air', 'AIR'),
+      dive: el('div.pip.pip--dive', 'DIVE'),
+      slide: el('div.pip.pip--slide', 'SLIDE'),
+      boost: el('div.pip.pip--boost', 'BOOST'),
+    };
+    this.pips.boost.hidden = true;
 
     this.root = el('div.hud', [
       el('div.hud__left', [
@@ -31,28 +41,27 @@ export class Hud {
           stat('Best', 'best'),
         ]),
         el('div.hud__panel.hud__panel--status', [
-          el('span.hud__title', options.levelTitle ?? ''),
-          (this.foodEl = el('span.food-status', 'IN HAND')),
+          el('div', [
+            el('span.hud__title', options.levelTitle ?? ''),
+            (this.foodEl = el('span.food-status', 'IN HAND')),
+            el('div.charge-bar', [this.chargeFill]),
+          ]),
         ]),
+        el('div.hud__abilities', Object.values(this.pips)),
         (this.buffsEl = el('div.hud__buffs')),
       ]),
       el('div.hud__right', [
-        el('button.btn.btn--sm.btn--ghost', {
-          onclick: () => options.onPause?.(),
-          title: 'Pause (Esc)',
-        }, 'Pause'),
-        el('button.btn.btn--sm.btn--warn', {
-          onclick: () => options.onRestart?.(),
-          title: 'Restart (R)',
-        }, 'Restart'),
-        el('button.btn.btn--sm.btn--ghost', {
-          onclick: () => options.onMenu?.(),
-        }, 'Menu'),
+        el('button.btn.btn--sm.btn--ghost',
+          { onclick: () => options.onPause?.(), title: 'Pause (Esc)' }, 'Pause'),
+        el('button.btn.btn--sm.btn--warn',
+          { onclick: () => options.onRestart?.(), title: 'Restart (R)' }, 'Restart'),
+        el('button.btn.btn--sm.btn--ghost',
+          { onclick: () => options.onMenu?.() }, 'Menu'),
       ]),
     ]);
 
     this.values.level.textContent = options.levelLabel ?? '';
-    this.values.par.textContent = `${options.parTime?.toFixed(1) ?? '—'}s`;
+    this.values.par.textContent = options.parTime != null ? `${options.parTime.toFixed(1)}s` : '—';
     this.values.best.textContent = options.best != null ? formatTime(options.best) : '—';
   }
 
@@ -71,19 +80,36 @@ export class Hud {
       this.foodEl.dataset.status = status.toLowerCase();
     }
 
-    // Only the buffs actually running are shown; the old HUD displayed both
+    // Throw charge.
+    this.chargeFill.style.width = `${Math.round(state.charge * 100)}%`;
+    this.chargeFill.classList.toggle('is-full', state.charge >= 1);
+
+    // Ability availability.
+    this.pips.air.classList.toggle('is-ready', state.airJumps > 0);
+    this.pips.air.textContent = state.maxAirJumps > 1
+      ? `AIR ${state.airJumps}/${state.maxAirJumps}`
+      : 'AIR';
+    this.pips.dive.classList.toggle('is-ready', state.diveReady);
+    this.pips.slide.classList.toggle('is-ready', state.slideReady);
+
+    const inVehicle = Boolean(state.vehicle);
+    this.pips.boost.hidden = !inVehicle;
+    this.pips.boost.classList.toggle('is-ready', state.boostReady || state.boost > 0);
+
+    // Only the buffs actually running are shown; the old HUD displayed its
     // badges permanently whether or not you had the pickup.
     const badges = [];
     if (state.buffs.speed > 0) badges.push(['speed', 'SPEED']);
     if (state.buffs.jump > 0) badges.push(['jump', 'JUMP']);
+    if (state.buffs.shield > 0) badges.push(['shield', 'SHIELD']);
+    if (state.buffs.magnet > 0) badges.push(['magnet', 'MAGNET']);
     if (state.vehicle) badges.push(['vehicle', state.vehicle.toUpperCase()]);
 
     const signature = badges.map(b => b[0]).join(',');
     if (signature !== this._badgeSignature) {
       this._badgeSignature = signature;
       this.buffsEl.replaceChildren(
-        ...badges.map(([kind, label]) => el(`span.badge.badge--${kind}`, label)),
-      );
+        ...badges.map(([kind, label]) => el(`span.badge.badge--${kind}`, label)));
     }
   }
 

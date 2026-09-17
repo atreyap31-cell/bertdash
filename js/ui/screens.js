@@ -56,7 +56,10 @@ export function renderMenu(app) {
         tile('Settings', 'Sound, data, name', () => openSettings(app)),
       ]),
       el('footer.menu__foot', [
-        el('span', 'WASD / Arrows move · Space jump · S slide · E dive · Click throws the bag · Q leaves a vehicle · Esc pauses'),
+        el('span', 'WASD / Arrows move · Space jump, again in mid-air for a second jump · '
+          + 'Space on a wall to kick off · S slide, then Space for a long jump · '
+          + 'E dive toward the cursor · Hold click to charge a throw · '
+          + 'Shift boosts a vehicle, Q leaves it · R restarts · Esc pauses'),
       ]),
     ]),
   ]);
@@ -96,23 +99,48 @@ export function renderLevelSelect(app) {
 export function renderWorkshop(app) {
   const p = profile.get();
 
-  const cards = p.customLevels.map(level => el('div.custom-card', [
-    el('div.custom-card__title', level.title),
-    el('div.custom-card__meta', `${level.platforms.length} pieces · ${level.width}×${level.height}`),
-    el('div.custom-card__actions', [
-      el('button.btn.btn--sm.btn--primary', { onclick: () => app.playCustom(level) }, 'Play'),
-      el('button.btn.btn--sm.btn--ghost', { onclick: () => app.openEditor(level) }, 'Edit'),
-      el('button.btn.btn--sm.btn--danger', {
-        onclick: async () => {
-          if (await confirmDialog(`Delete "${level.title}"? This cannot be undone.`, { confirmLabel: 'Delete' })) {
-            profile.deleteCustomLevel(level.id);
-            toast('Level deleted');
-            app.show('workshop');
-          }
+  const cards = p.customLevels.map(level => {
+    const pieces = level.platforms.length
+      + (level.vehicles?.length ?? 0) + (level.powerups?.length ?? 0);
+    return el('div.custom-card', [
+      // The title doubles as a rename field; there is nowhere else to do it.
+      el('input.custom-card__title', {
+        value: level.title, maxLength: 40, 'aria-label': 'Level name',
+        onchange: event => {
+          const title = event.target.value.trim() || 'Untitled Level';
+          profile.saveCustomLevel({ ...level, title });
+          toast('Renamed');
         },
-      }, 'Delete'),
-    ]),
-  ]));
+      }),
+      el('div.custom-card__meta',
+        `${pieces} piece${pieces === 1 ? '' : 's'} · ${level.width}×${level.height}`),
+      el('div.custom-card__actions', [
+        el('button.btn.btn--sm.btn--primary', { onclick: () => app.playCustom(level) }, 'Play'),
+        el('button.btn.btn--sm.btn--ghost', { onclick: () => app.openEditor(level) }, 'Edit'),
+        el('button.btn.btn--sm.btn--ghost', {
+          title: 'Duplicate',
+          onclick: () => {
+            profile.saveCustomLevel({
+              ...structuredClone(level),
+              id: `custom-${Date.now()}`,
+              title: `${level.title} copy`,
+            });
+            toast('Duplicated');
+            app.show('workshop');
+          },
+        }, 'Copy'),
+        el('button.btn.btn--sm.btn--danger', {
+          onclick: async () => {
+            if (await confirmDialog(`Delete "${level.title}"? This cannot be undone.`, { confirmLabel: 'Delete' })) {
+              profile.deleteCustomLevel(level.id);
+              toast('Level deleted');
+              app.show('workshop');
+            }
+          },
+        }, 'Delete'),
+      ]),
+    ]);
+  });
 
   return el('div.screen', [
     el('div.panel.panel--wide', [
@@ -125,7 +153,8 @@ export function renderWorkshop(app) {
       ]),
       cards.length
         ? el('div.custom-grid', cards)
-        : el('p.empty', 'No custom levels yet. Build one in the editor — it saves straight to this browser.'),
+        : el('p.empty', 'No custom levels yet. Build one in the editor — it saves straight to this browser. '
+            + 'You can place terrain, hazards, vehicles and powerups, and tune the level’s physics.'),
     ]),
   ]);
 }
