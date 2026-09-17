@@ -45,6 +45,8 @@ export class Game {
     this.onStats = options.onStats ?? (() => {});
     this.onPauseRequest = options.onPauseRequest ?? (() => {});
     this.reducedFlash = Boolean(options.reducedFlash);
+    // 0 disables screen shake entirely; reduced-flash damps it.
+    this.shakeScale = options.shakeScale ?? (this.reducedFlash ? 0.4 : 1);
     // Gear bought in the store folds into a single set of modifiers, so the
     // engine reads one object rather than knowing about individual items.
     this.loadout = { ...DEFAULT_LOADOUT, ...(options.loadout ?? {}) };
@@ -146,6 +148,7 @@ export class Game {
       x: clamp(start.x - VIEW_W / 2, 0, Math.max(0, this.level.width - VIEW_W)),
       y: clamp(start.y - VIEW_H / 2, 0, Math.max(0, this.level.height - VIEW_H)),
     };
+    this.cameraLead = { x: 0, y: 0 };
   }
 
   // --- lifecycle -----------------------------------------------------------
@@ -276,7 +279,7 @@ export class Game {
 
     if (this.deathReason) {
       this.deathTimer -= SIM_STEP;
-      this.shake *= 0.88;
+      this.shake *= PHYSICS.shake.decay;
       this.#stepParticles();
       if (this.deathTimer <= 0 && !this.finished) {
         this.finished = true;
@@ -295,7 +298,8 @@ export class Game {
     this.#stepGoal();
     this.#stepParticles();
     this.#stepCamera();
-    this.shake *= 0.86;
+    this.shake *= PHYSICS.shake.decay;
+    if (this.shake < PHYSICS.shake.cutoff) this.shake = 0;
     this.pressed.clear();
   }
 
@@ -617,7 +621,7 @@ export class Game {
       this.#addFlow('diveBounce');
       audio.wallJump();
       this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 14, this.skin.color);
-      this.shake = this.reducedFlash ? 2 : 6;
+      this.#addShake(PHYSICS.shake.diveBounce);
     }
 
     // Landing refills the air jump and disarms any dive that did not bounce.
@@ -985,7 +989,7 @@ export class Game {
           p.diveTimer = 0;
           this.#bump('bagBounces');
           audio.win(3);
-          this.shake = this.reducedFlash ? 2 : 7;
+          this.#addShake(PHYSICS.shake.bagBounce);
           this.#spawnParticles(p.x + p.width / 2, p.y + p.height / 2, 18, COLORS.food);
         }
         return;
@@ -1028,7 +1032,7 @@ export class Game {
       f.vx = (fromLeft < fromRight ? -1 : 1) * Math.abs(f.vx) * PHYSICS.bagWallBounceDamp;
       f.vy *= PHYSICS.bagWallLift;
 
-      this.shake = this.reducedFlash ? 1 : 3;
+      this.#addShake(PHYSICS.shake.bagGlance);
       audio.land();
       this.#spawnParticles(f.x + f.size / 2, f.y + f.size / 2, 5, COLORS.food);
       return;
@@ -1200,7 +1204,7 @@ export class Game {
       p.vx = (p.facingRight ? -1 : 1) * 7; // knocked back out of the hazard
       p.diving = false;
       if (p.sliding) this.#endSlide();
-      this.shake = this.reducedFlash ? 3 : 10;
+      this.#addShake(PHYSICS.shake.shield);
       this.#bump('shieldsUsed');
       audio.wallJump();
       this.#spawnParticles(p.x + p.width / 2, p.y + p.height / 2, 20, COLORS.buffShield);
@@ -1209,7 +1213,7 @@ export class Game {
 
     this.deathReason = reason;
     this.deathTimer = 520;
-    this.shake = this.reducedFlash ? 4 : 18;
+    this.#addShake(PHYSICS.shake.death);
     this.#bump('totalDeaths');
     this.#bump({
       DROPPED: 'deathsByDrop',
@@ -1221,6 +1225,12 @@ export class Game {
     audio.death();
     this.#spawnParticles(p.x + PLAYER_W / 2, p.y + PLAYER_H / 2, 24, this.skin.color);
     this.#flushStats();
+  }
+
+  /** Adds screen shake, capped and scaled by the player's settings. */
+  #addShake(amount) {
+    if (this.shakeScale <= 0) return;
+    this.shake = Math.min(PHYSICS.shake.max, this.shake + amount * this.shakeScale);
   }
 
   #spawnParticles(x, y, count, color) {
@@ -1257,13 +1267,17 @@ export class Game {
     const maxX = Math.max(0, this.level.width - VIEW_W);
     const maxY = Math.max(0, this.level.height - VIEW_H);
 
-    // Look ahead along the direction of travel. Centring exactly on the player
-    // means at speed you are always looking at where you have just been.
-    const leadX = clamp(p.vx * PHYSICS.cameraLeadX, -PHYSICS.cameraLeadMaxX, PHYSICS.cameraLeadMaxX);
-    const leadY = clamp(p.vy * PHYSICS.cameraLeadY, -PHYSICS.cameraLeadMaxY, PHYSICS.cameraLeadMaxY);
+    // Look ahead along the direction of travel, but ease the look-ahead itself
+    // rather than reading velocity straight off the player. The player's speed
+    // can change by its full amount in a single frame — that is what stopping
+    // dead means — and feeding that to the camera makes it lurch every time.
+    const wantX = clamp(p.vx * PHYSICS.cameraLeadX, -PHYSICS.cameraLeadMaxX, PHYSICS.cameraLeadMaxX);
+    const wantY = clamp(p.vy * PHYSICS.cameraLeadY, -PHYSICS.cameraLeadMaxY, PHYSICS.cameraLeadMaxY);
+    this.cameraLead.x += (wantX - this.cameraLead.x) * PHYSICS.cameraLeadEase;
+    this.cameraLead.y += (wantY - this.cameraLead.y) * PHYSICS.cameraLeadEase;
 
-    const targetX = clamp(p.x + p.width / 2 + leadX - VIEW_W / 2, 0, maxX);
-    const targetY = clamp(p.y + p.height / 2 + leadY - VIEW_H / 2, 0, maxY);
+    const targetX = clamp(p.x + p.width / 2 + this.cameraLead.x - VIEW_W / 2, 0, maxX);
+    const targetY = clamp(p.y + p.height / 2 + this.cameraLead.y - VIEW_H / 2, 0, maxY);
 
     this.camera.x += (targetX - this.camera.x) * PHYSICS.cameraEase;
     this.camera.y += (targetY - this.camera.y) * PHYSICS.cameraEase;
@@ -1374,7 +1388,7 @@ export class Game {
     const cam = this.camera;
 
     ctx.save();
-    if (this.shake > 0.5) {
+    if (this.shake > PHYSICS.shake.cutoff) {
       ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
     }
 

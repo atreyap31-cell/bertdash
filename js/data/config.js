@@ -40,11 +40,30 @@ export const PHYSICS = {
   maxSpeedX: 34,
   // Camera. It leads the direction of travel rather than sitting dead-centre,
   // so fast movement shows you where you are going instead of where you were.
-  cameraEase: 0.16,
-  cameraLeadX: 16,     // frames of horizontal velocity to look ahead by
-  cameraLeadY: 10,
-  cameraLeadMaxX: 190,
-  cameraLeadMaxY: 130,
+  cameraEase: 0.14,
+  cameraLeadX: 9,      // frames of horizontal velocity to look ahead by
+  cameraLeadY: 5,
+  cameraLeadMaxX: 130,
+  cameraLeadMaxY: 80,
+  // The look-ahead is eased separately from the camera itself. Without this,
+  // ground friction snapping the player's speed to zero moves the target a
+  // hundred pixels in one frame and the camera visibly lurches every time you
+  // stop — which reads as the whole screen shaking.
+  cameraLeadEase: 0.05,
+
+  // Screen shake, per event. Deliberately small: these fire often — every dive
+  // bounce, every bag catch — and a big kick on each one makes the game look
+  // like it is vibrating rather than reacting.
+  shake: {
+    death: 9,
+    shield: 4,
+    diveBounce: 2.5,
+    bagBounce: 2.5,
+    bagGlance: 1.5,
+    decay: 0.78,      // how fast it settles; lower is snappier
+    cutoff: 0.6,      // below this there is no shake at all
+    max: 10,
+  },
 
   // --- assists -------------------------------------------------------------
   // These read what the player was obviously trying to do and let it happen,

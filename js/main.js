@@ -164,6 +164,10 @@ class App {
       loadout: profile.loadout(),
       bindings: profile.bindings(),
       reducedFlash: p.settings.reducedFlash === true,
+      // Screen shake is opt-out on its own, separately from reduced flashing.
+      shakeScale: p.settings.screenShake === false
+        ? 0
+        : (p.settings.reducedFlash === true ? 0.4 : 1),
       onWin: result => this.#handleWin(result),
       onLose: reason => this.#handleLose(reason),
       onStats: batch => batch.forEach((amount, key) => profile.bump(key, amount)),

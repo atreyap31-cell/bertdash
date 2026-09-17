@@ -29,3 +29,13 @@ Development scripts. Not part of the deployed site.
   ```bash
   node tools/motion-audit.mjs
   ```
+
+- **`camera-audit.mjs`** — measures camera jerk (frame-to-frame change in
+  camera velocity) under a steady run, repeated start/stop, and rapid weaving.
+  This is how the look-ahead lurch was found: ground friction snaps the
+  player's speed to zero on key release, and feeding that straight to the
+  camera moved its target ~110px in a single frame.
+
+  ```bash
+  node tools/camera-audit.mjs
+  ```

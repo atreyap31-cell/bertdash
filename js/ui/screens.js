@@ -457,6 +457,17 @@ export function openSettings(app) {
     el('label.setting', [
       el('input', {
         type: 'checkbox',
+        checked: p.settings.screenShake !== false,
+        onchange: event => profile.setSetting('screenShake', event.target.checked),
+      }),
+      el('div', [
+        el('span.setting__label', 'Screen shake'),
+        el('span.setting__hint', 'A small kick on impacts. Turn it off for a completely still camera.'),
+      ]),
+    ]),
+    el('label.setting', [
+      el('input', {
+        type: 'checkbox',
         checked: p.settings.reducedFlash === true,
         onchange: event => profile.setSetting('reducedFlash', event.target.checked),
       }),

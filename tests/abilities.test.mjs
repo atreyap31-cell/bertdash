@@ -950,3 +950,73 @@ test('clipping the corner of a ceiling nudges you past it', () => {
   assert.ok(peak < ceilingBottom - 20,
     `and carried on up past the ceiling, peaked at ${peak.toFixed(0)}`);
 });
+
+// --- camera ----------------------------------------------------------------
+
+/** Peak frame-to-frame change in camera velocity: how violently it moves. */
+function cameraJerk(game, script) {
+  let prevX = game.camera.x;
+  let prevVel = 0;
+  let worst = 0;
+  script(() => {
+    advance(1);
+    const vel = game.camera.x - prevX;
+    worst = Math.max(worst, Math.abs(vel - prevVel));
+    prevX = game.camera.x;
+    prevVel = vel;
+  });
+  return worst;
+}
+
+test('stopping does not make the camera lurch', () => {
+  // Ground friction snaps the player's speed to zero the moment a key is
+  // released. Feeding that straight to the camera's look-ahead moved the
+  // target a hundred pixels in one frame, which read as the screen shaking.
+  const { game } = boot(fixture({
+    width: 12000,
+    platforms: [{ x: 0, y: FLOOR_Y, width: 12000, height: 200, type: 'static' }],
+    goalPos: { x: 11800, y: 470 },
+  }));
+  advance(40);
+
+  const worst = cameraJerk(game, step => {
+    for (let i = 0; i < 5; i++) {
+      keys.down('KeyD');
+      for (let f = 0; f < 35; f++) step();
+      keys.up('KeyD');
+      for (let f = 0; f < 25; f++) step();
+    }
+  });
+
+  assert.ok(worst < 4,
+    `camera jerk peaked at ${worst.toFixed(2)}px/frame^2, which is visible as shake`);
+});
+
+test('screen shake can be turned off entirely', () => {
+  resetClock();
+  const canvas = makeCanvas();
+  const game = new Game(canvas, fixture(), {
+    skin: { color: '#06c167', textColor: '#fff' },
+    shakeScale: 0,
+    onWin: () => {}, onLose: () => {}, onStats: () => {},
+  });
+  game.start();
+  advance(40);
+
+  // Force the biggest shake in the game.
+  game.player.y = -5000;               // fall out of the world
+  for (let i = 0; i < 20; i++) advance(1);
+
+  assert.equal(game.shake, 0, 'no shake should ever be applied');
+  game.destroy();
+});
+
+test('shake settles quickly rather than rumbling on', () => {
+  const { game } = boot();
+  advance(40);
+  game.shake = 10;                     // as if something big just happened
+
+  let frames = 0;
+  while (game.shake > 0 && frames < 120) { advance(1); frames++; }
+  assert.ok(frames <= 15, `shake took ${frames} frames to settle`);
+});

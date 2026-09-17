@@ -71,7 +71,10 @@ on a pixel:
 - **Last input wins** — holding both direction keys turns you the way you
   pressed most recently instead of cancelling to a dead stop.
 - **Coyote time and jump buffering**, and a camera that leads the direction of
-  travel instead of sitting dead-centre.
+  travel instead of sitting dead-centre. The look-ahead is eased separately
+  from the camera, so stopping does not lurch the view.
+
+Screen shake is small by design and can be turned off completely in Settings.
 
 ### Flow
 
@@ -113,7 +116,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-91 tests across five suites:
+94 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
