@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BertDash</title>
+<meta name="description" content="A browser platformer about delivering a takeaway bag across 34 hand-built levels. No install, no accounts, no network calls.">
+<meta name="theme-color" content="#05060a">
+<meta name="color-scheme" content="dark">
+
+<meta property="og:title" content="BertDash">
+<meta property="og:description" content="Deliver the bag. Do not drop the bag. 34 levels of platforming in your browser.">
+<meta property="og:type" content="website">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="is-booting">
+
+<div id="app" role="main"></div>
+
+<noscript>
+  <div class="noscript">
+    <h1>BertDash</h1>
+    <p>This game runs entirely in JavaScript. Please enable it to play.</p>
+  </div>
+</noscript>
+
+<div id="boot" class="boot">
+  <h1 class="logo"><span>BERT</span><span class="logo__accent">DASH</span></h1>
+  <p class="boot__status">Loading&hellip;</p>
+</div>
+
+<script type="module" src="js/main.js"></script>
+<script nomodule>
+  document.getElementById('boot').innerHTML =
+    '<h1 class="logo"><span>BERT</span><span class="logo__accent">DASH</span></h1>' +
+    '<p class="boot__status">This browser is too old to run BertDash. ' +
+    'Please use a current version of Firefox, Chrome, Edge or Safari.</p>';
+</script>
+</body>
+</html>

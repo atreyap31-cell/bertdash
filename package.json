@@ -1,0 +1,12 @@
+{
+  "name": "bertdash",
+  "version": "1.0.0",
+  "description": "A browser platformer about delivering a takeaway bag across 34 hand-built levels.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/engine.test.mjs tests/profile.test.mjs",
+    "start": "npx --yes http-server . -p 8080 -c-1"
+  },
+  "license": "MIT"
+}
