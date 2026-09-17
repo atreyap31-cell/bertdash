@@ -839,3 +839,114 @@ test('a level can still ask for ice', () => {
   assert.ok(Math.abs(game.player.vx) > 3,
     'on ice the player should still be sliding well after the input stops');
 });
+
+// --- movement smoothness ---------------------------------------------------
+
+test('the simulation never drops a frame at a steady refresh rate', () => {
+  // A frame arriving a hair under the fixed timestep used to run no simulation
+  // step at all, which reads as a periodic stutter for no visible reason.
+  // A long level, so the run never reaches the far wall and every stalled
+  // frame is a genuine dropped step rather than the player being blocked.
+  const { game } = boot(fixture({
+    width: 12000,
+    platforms: [{ x: 0, y: FLOOR_Y, width: 12000, height: 200, type: 'static' }],
+    goalPos: { x: 11800, y: 470 },
+  }));
+  advance(40);
+  keys.down('KeyD');
+  advance(60);                         // up to a constant speed
+
+  const speed = Math.abs(game.player.vx);
+  assert.ok(speed > 6, 'should be running by now');
+
+  let stalled = 0;
+  for (let i = 0; i < 400; i++) {
+    const before = game.player.x;
+    advance(1);
+    if (Math.abs(game.player.x - before) < speed * 0.5) stalled++;
+  }
+  keys.up('KeyD');
+
+  assert.equal(stalled, 0, `${stalled} frames advanced the player barely at all`);
+});
+
+test('holding both directions turns instead of stopping dead', () => {
+  const { game } = boot();
+  advance(40);
+
+  keys.down('KeyD');
+  advance(40);
+  assert.ok(game.player.vx > 4, 'running right');
+
+  // Roll onto the other key without releasing the first, the way a player does.
+  keys.down('KeyA');
+  advance(20);
+  assert.ok(game.player.vx < -2,
+    `the newer key should win, got vx ${game.player.vx.toFixed(2)}`);
+
+  // And back again.
+  keys.down('KeyD');
+  advance(20);
+  assert.ok(game.player.vx > 2, 'rolling back should turn again');
+  keys.up('KeyA');
+  keys.up('KeyD');
+});
+
+test('a small lip is stepped over rather than stopping you', () => {
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      { x: 600, y: FLOOR_Y - 12, width: 400, height: 40, type: 'static' },  // 12px lip
+    ],
+  });
+  const { game } = boot(level);
+  advance(40);
+  keys.down('KeyD');
+  for (let i = 0; i < 160; i++) advance(1);
+  keys.up('KeyD');
+
+  assert.ok(game.player.x > 700, `should have walked over the lip, stopped at ${game.player.x.toFixed(0)}`);
+  assert.equal(game.player.grounded, true, 'and still be on the ground');
+});
+
+test('a tall step is not climbed', () => {
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      { x: 600, y: FLOOR_Y - 60, width: 400, height: 90, type: 'static' },  // 60px wall
+    ],
+  });
+  const { game } = boot(level);
+  advance(40);
+  keys.down('KeyD');
+  for (let i = 0; i < 160; i++) advance(1);
+  keys.up('KeyD');
+
+  assert.ok(game.player.x + game.player.width <= 601,
+    `a 60px step should still block, player reached ${game.player.x.toFixed(0)}`);
+});
+
+test('clipping the corner of a ceiling nudges you past it', () => {
+  // A ceiling whose edge the player will just catch on the way up.
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      // Overlaps the player's right edge by 8px — inside the correction window.
+      { x: 224, y: 300, width: 400, height: 60, type: 'static' },
+    ],
+    startPos: { x: 200, y: 440 },
+  });
+  const { game } = boot(level);
+  advance(40);
+
+  const startX = game.player.x;
+  const ceilingBottom = 360;
+  jump(16);
+  let peak = game.player.y;
+  for (let i = 0; i < 40; i++) { advance(1); peak = Math.min(peak, game.player.y); }
+
+  assert.ok(game.player.x < startX - 4,
+    `the player should have been nudged clear of the corner, moved ${(game.player.x - startX).toFixed(1)}`);
+  assert.ok(peak < ceilingBottom - 20,
+    `and carried on up past the ceiling, peaked at ${peak.toFixed(0)}`);
+});

@@ -8,6 +8,16 @@ export const SIM_FPS = 60;
 export const SIM_STEP = 1000 / SIM_FPS;
 export const MAX_FRAME_MS = 100; // never simulate more than this per rAF tick
 
+// Slack on the fixed-timestep accumulator, in milliseconds.
+//
+// A frame that arrives a hair under SIM_STEP would otherwise run no simulation
+// step at all, and the next would run two. At a perfect 60Hz the floating-point
+// representation of 1000/60 makes that happen about five times every six
+// hundred frames — a visible hitch every couple of seconds, for no reason the
+// player can see. This absorbs that noise without letting real slow frames
+// through.
+export const STEP_EPSILON = 0.25;
+
 export const VIEW_W = 800;
 export const VIEW_H = 600;
 
@@ -28,6 +38,28 @@ export const PHYSICS = {
   // add to vx, and without a cap they can compound into speeds that tunnel
   // straight through a platform between two sub-steps.
   maxSpeedX: 34,
+  // Camera. It leads the direction of travel rather than sitting dead-centre,
+  // so fast movement shows you where you are going instead of where you were.
+  cameraEase: 0.16,
+  cameraLeadX: 16,     // frames of horizontal velocity to look ahead by
+  cameraLeadY: 10,
+  cameraLeadMaxX: 190,
+  cameraLeadMaxY: 130,
+
+  // --- assists -------------------------------------------------------------
+  // These read what the player was obviously trying to do and let it happen,
+  // rather than stopping them dead on a pixel. Without them, clipping the
+  // corner of a ledge by 2px cancels a jump you clearly made.
+
+  // Clip a ceiling this close to its edge and you are nudged around it instead
+  // of bonking. Classic corner correction.
+  cornerCorrection: 11,
+  // Run into a lip no taller than this and you step over it.
+  stepUpHeight: 14,
+  // Land within this of a ledge's edge and you are pulled onto it rather than
+  // scraping down the side.
+  ledgeAssist: 9,
+
   // Acceleration. These are per-frame lerp factors towards the target speed.
   // They exist because the ground value used to be 1 — velocity snapped to
   // full speed in a single frame, which gave movement no weight at all and

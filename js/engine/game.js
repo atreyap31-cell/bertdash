@@ -4,7 +4,7 @@
 // matter what the display refresh rate is, so a 144Hz monitor no longer makes
 // the player move 2.4x faster than a 60Hz one.
 
-import { PHYSICS, COLORS, FLOW, POWERUP_BY_ID, DEFAULT_BINDINGS, AIM_ACTIONS, SIM_STEP, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
+import { PHYSICS, COLORS, FLOW, POWERUP_BY_ID, DEFAULT_BINDINGS, AIM_ACTIONS, SIM_STEP, STEP_EPSILON, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
 import { prepareLevel, isSolidType, clamp } from './level.js';
 import { audio } from '../services/audio.js';
 
@@ -74,6 +74,7 @@ export class Game {
     // Aim is a direction, not a screen position: the arrow keys choose it.
     this.aimDir = { x: 1, y: 0 };
     this.aiming = false;
+    this.lastSteer = 1;   // which direction key was pressed most recently
     this.recentCatchAt = -Infinity; // gameplay ms of the last mid-air catch
     this.charging = false;          // mouse held: winding up a throw
     this.charge = 0;                // frames of wind-up so far
@@ -192,6 +193,10 @@ export class Game {
         return;
       }
       if (swallow.has(event.code)) event.preventDefault();
+      // Remember which way was asked for most recently, so rolling from one
+      // direction key to the other reads as a turn rather than a stop.
+      if (this.#isBound('left', event.code)) this.lastSteer = -1;
+      if (this.#isBound('right', event.code)) this.lastSteer = 1;
       this.keys.add(event.code);
       this.pressed.add(event.code);
       audio.unlock();
@@ -248,9 +253,11 @@ export class Game {
     if (!this.paused) {
       this.accumulator += delta;
       let steps = 0;
-      while (this.accumulator >= SIM_STEP && steps < 5) {
+      // The epsilon matters: without it a frame a fraction of a microsecond
+      // short of SIM_STEP runs nothing, and the player visibly stutters.
+      while (this.accumulator + STEP_EPSILON >= SIM_STEP && steps < 5) {
         this.#step();
-        this.accumulator -= SIM_STEP;
+        this.accumulator = Math.max(0, this.accumulator - SIM_STEP);
         steps++;
       }
       if (steps === 5) this.accumulator = 0; // give up rather than spiral
@@ -407,7 +414,10 @@ export class Game {
 
     const left = this.#held('left');
     const right = this.#held('right');
-    const steer = (right ? 1 : 0) - (left ? 1 : 0);
+    // Holding both directions used to cancel out and stop the player dead,
+    // which punishes the very normal habit of rolling from one key to the
+    // other. The most recent press wins instead.
+    const steer = (left && right) ? this.lastSteer : (right ? 1 : 0) - (left ? 1 : 0);
     if (steer !== 0) this.#beginRun();
     const jumpHeld = this.#held('jump');
 
@@ -679,11 +689,25 @@ export class Game {
     const maxX = Math.max(0, this.level.width - p.width);
     const stepsX = Math.max(1, Math.ceil(Math.abs(p.vx) / 8));
     const incX = p.vx / stepsX;
+
     for (let i = 0; i < stepsX; i++) {
       p.x += incX;
       for (const plat of solids) {
         if (plat.oneWay) continue; // ledges never block horizontally
         if (!overlaps(p, plat)) continue;
+
+        // Step-up: a lip you could obviously walk over should not stop you.
+        // Only on the ground, and only if there is headroom above the step.
+        if (p.grounded || p.coyote > 0) {
+          const lip = (p.y + p.height) - plat.y;
+          if (lip > 0 && lip <= PHYSICS.stepUpHeight) {
+            const stepped = { x: p.x, y: p.y - lip, width: p.width, height: p.height };
+            const blocked = solids.some(other => other !== plat && !other.oneWay
+              && overlaps(stepped, other));
+            if (!blocked) { p.y -= lip; continue; }
+          }
+        }
+
         if (incX > 0) p.x = plat.x - p.width;
         else if (incX < 0) p.x = plat.x + plat.width;
         p.vx = 0;
@@ -721,12 +745,53 @@ export class Game {
           p.groundPlatform = plat;
           if (!wasGrounded) audio.land();
         } else if (incY < 0 && !plat.oneWay) {
-          // Head bump
+          // Head bump, with corner correction: if only a sliver of the player
+          // is under the ceiling, slide them clear of it and let the jump
+          // continue. This is the difference between "I made that" and "the
+          // game clipped me".
+          const overlapLeft = (p.x + p.width) - plat.x;   // sliver on the left edge
+          const overlapRight = (plat.x + plat.width) - p.x; // sliver on the right edge
+          const nudge = overlapLeft < overlapRight ? -overlapLeft : overlapRight;
+
+          if (Math.abs(nudge) <= PHYSICS.cornerCorrection) {
+            const shifted = { x: p.x + nudge, y: p.y, width: p.width, height: p.height };
+            const blocked = solids.some(other => !other.oneWay && overlaps(shifted, other));
+            if (!blocked) { p.x += nudge; continue; }
+          }
+
           p.y = plat.y + plat.height;
           p.vy = 0;
         }
       }
       if (p.grounded) break;
+    }
+
+    // Ledge assist: falling just past the lip of a platform, with the feet
+    // barely below its surface, pulls you onto it instead of scraping down.
+    if (!p.grounded && p.vy > 0 && !p.wallSliding) {
+      const feet = p.y + p.height;
+      for (const plat of solids) {
+        if (feet < plat.y || feet > plat.y + PHYSICS.ledgeAssist) continue;
+        const pastLeft = plat.x - (p.x + p.width);   // >0 when just left of it
+        const pastRight = p.x - (plat.x + plat.width); // >0 when just right of it
+        const gap = Math.max(pastLeft, pastRight);
+        if (gap < 0 || gap > PHYSICS.ledgeAssist) continue;
+        // Only help if the player is heading towards the ledge.
+        if (pastLeft > 0 && p.vx <= 0) continue;
+        if (pastRight > 0 && p.vx >= 0) continue;
+
+        const nudge = pastLeft > 0 ? gap + 1 : -(gap + 1);
+        const shifted = { x: p.x + nudge, y: plat.y - p.height, width: p.width, height: p.height };
+        if (solids.some(other => other !== plat && !other.oneWay && overlaps(shifted, other))) continue;
+
+        p.x += nudge;
+        p.y = plat.y - p.height;
+        p.vy = 0;
+        p.grounded = true;
+        p.groundPlatform = plat;
+        if (!wasGrounded) audio.land();
+        break;
+      }
     }
 
     if (p.grounded) {
@@ -1189,10 +1254,23 @@ export class Game {
 
   #stepCamera() {
     const p = this.player;
-    const targetX = clamp(p.x + p.width / 2 - VIEW_W / 2, 0, Math.max(0, this.level.width - VIEW_W));
-    const targetY = clamp(p.y + p.height / 2 - VIEW_H / 2, 0, Math.max(0, this.level.height - VIEW_H));
-    this.camera.x += (targetX - this.camera.x) * 0.12;
-    this.camera.y += (targetY - this.camera.y) * 0.12;
+    const maxX = Math.max(0, this.level.width - VIEW_W);
+    const maxY = Math.max(0, this.level.height - VIEW_H);
+
+    // Look ahead along the direction of travel. Centring exactly on the player
+    // means at speed you are always looking at where you have just been.
+    const leadX = clamp(p.vx * PHYSICS.cameraLeadX, -PHYSICS.cameraLeadMaxX, PHYSICS.cameraLeadMaxX);
+    const leadY = clamp(p.vy * PHYSICS.cameraLeadY, -PHYSICS.cameraLeadMaxY, PHYSICS.cameraLeadMaxY);
+
+    const targetX = clamp(p.x + p.width / 2 + leadX - VIEW_W / 2, 0, maxX);
+    const targetY = clamp(p.y + p.height / 2 + leadY - VIEW_H / 2, 0, maxY);
+
+    this.camera.x += (targetX - this.camera.x) * PHYSICS.cameraEase;
+    this.camera.y += (targetY - this.camera.y) * PHYSICS.cameraEase;
+
+    // Settle exactly rather than easing towards the target forever.
+    if (Math.abs(targetX - this.camera.x) < 0.2) this.camera.x = targetX;
+    if (Math.abs(targetY - this.camera.y) < 0.2) this.camera.y = targetY;
   }
 
   // --- flow ----------------------------------------------------------------

@@ -18,3 +18,14 @@ Development scripts. Not part of the deployed site.
   ```bash
   node tools/build-levels.mjs && npm test
   ```
+
+- **`motion-audit.mjs`** — drives every level with random input and reports
+  frames where the player moved further than their velocity accounts for,
+  moved barely at all despite having speed, or resized their hitbox mid-air.
+  This is how the fixed-timestep stutter was found: at a perfect 60Hz, the
+  floating-point representation of `1000/60` made roughly one frame in 120 run
+  no simulation step at all.
+
+  ```bash
+  node tools/motion-audit.mjs
+  ```

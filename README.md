@@ -58,6 +58,21 @@ lands decides the run:
 - **Momentum carries.** The bag inherits your full speed, so a throw made at a
   sprint or off the top of a bounce goes far further than a standing toss.
 
+### Movement assists
+
+The controls read what you were obviously trying to do rather than stopping you
+on a pixel:
+
+- **Corner correction** — clip the edge of a ceiling by up to 11px on the way up
+  and you are nudged around it instead of bonking.
+- **Step-up** — a lip 14px or shorter is walked over, not walked into.
+- **Ledge assist** — land just past the lip of a platform and you are pulled
+  onto it rather than scraping down the side.
+- **Last input wins** — holding both direction keys turns you the way you
+  pressed most recently instead of cancelling to a dead stop.
+- **Coyote time and jump buffering**, and a camera that leads the direction of
+  travel instead of sitting dead-centre.
+
 ### Flow
 
 Every distinct move adds to a chain that decays if you stand still. Repeating
@@ -98,7 +113,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-86 tests across five suites:
+91 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it

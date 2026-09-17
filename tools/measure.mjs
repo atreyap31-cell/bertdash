@@ -128,19 +128,14 @@ results.diveLaunch = arc((game, sample) => {
 // changes, so the timing is found rather than hardcoded.
 function bagBounceRun({ useAirJump = false } = {}) {
   const game = boot();
-  const canvas = game.canvas;
   const groundY = game.player.y;
-  const throwAt = (wx, wy) => {
-    const ev = { clientX: wx - game.camera.x, clientY: wy - game.camera.y, preventDefault() {} };
-    canvas.dispatch('pointermove', ev);
-    canvas.dispatch('pointerdown', ev);
-    canvas.dispatch('pointerup', ev);
-  };
+  // Aiming is on the arrow keys: hold to aim and charge, release to throw.
+  const throwUp = () => { down('ArrowUp'); advance(1); up('ArrowUp'); advance(1); };
 
   down('KeyD');
   advance(60);                                  // up to running speed
   const launchX = game.player.x;
-  throwAt(game.player.x + 40, game.player.y - 500);
+  throwUp();
 
   // Wait for the bag to come back down to within jumping distance.
   for (let i = 0; i < 200; i++) {
@@ -150,17 +145,23 @@ function bagBounceRun({ useAirJump = false } = {}) {
     advance(1);
   }
 
-  down('Space');
-  advance(16);
-  up('Space');
-
   let peak = 0;
   let reach = 0;
   let usedAir = false;
-  for (let i = 0; i < 260; i++) {
-    advance(1);
+  const sample = () => {
     peak = Math.max(peak, groundY - game.player.y);
     reach = Math.max(reach, Math.abs(game.player.x - launchX));
+  };
+
+  // Sample through the jump as well: the catch, and the launch it gives, can
+  // both happen inside these frames.
+  down('Space');
+  for (let i = 0; i < 16; i++) { advance(1); sample(); }
+  up('Space');
+
+  for (let i = 0; i < 260; i++) {
+    advance(1);
+    sample();
     if (useAirJump && !usedAir && game.player.hasFood && game.player.vy > 0) {
       down('Space'); advance(1); up('Space');
       usedAir = true;
@@ -222,5 +223,6 @@ results.bagBouncePlusAir = bagBounceRun({ useAirJump: true });
 console.log('Movement envelope (pixels):\n');
 for (const [name, v] of Object.entries(results)) {
   if (typeof v === 'number') { console.log(`  ${name.padEnd(17)} ${v}`); continue; }
-  console.log(`  ${name.padEnd(17)} rise ${String(v.height).padStart(4)}   gap ${String(v.distance).padStart(4)}`);
+  const note = v.caught === false ? '   (bag NOT caught)' : '';
+  console.log(`  ${name.padEnd(17)} rise ${String(v.height).padStart(4)}   gap ${String(v.distance).padStart(4)}${note}`);
 }
