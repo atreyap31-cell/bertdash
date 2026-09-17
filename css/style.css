@@ -922,3 +922,5 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 }
 .custom-card__title:hover { border-color: var(--line); }
 .custom-card__title:focus { border-color: var(--green); outline: none; background: var(--bg-sunken); }
+
+.menu__foot-key { display: block; color: var(--green); margin: 6px 0; }

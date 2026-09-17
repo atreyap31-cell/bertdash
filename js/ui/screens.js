@@ -2,7 +2,7 @@
 
 import { el, modal, toast, confirmDialog, formatTime, formatMoney } from './dom.js';
 import { SKINS, ACHIEVEMENTS, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
-import { LEVELS } from '../data/levels.js';
+import { LEVELS, CAMPAIGN_LENGTH } from '../data/levels.js';
 import { profile } from '../services/profile.js';
 import { audio } from '../services/audio.js';
 import { peer } from '../services/net.js';
@@ -42,12 +42,12 @@ export function renderMenu(app) {
       ]),
       el('div.menu__stats', [
         el('div.chip', [el('b', `$${formatMoney(p.tips)}`), ' tips']),
-        el('div.chip', [el('b', `${cleared}/33`), ' delivered']),
+        el('div.chip', [el('b', `${cleared}/${CAMPAIGN_LENGTH}`), ' delivered']),
         el('div.chip', [el('b', `${p.unlockedAchievements.length}/${ACHIEVEMENTS.length}`), ' trophies']),
       ]),
       el('div.menu__grid', [
         tile('Start Shift', 'Continue the campaign', () => app.startCampaign(), '.tile--primary'),
-        tile('Campaign', '33 levels', () => app.show('levels')),
+        tile('Campaign', `${CAMPAIGN_LENGTH} levels`, () => app.show('levels')),
         tile('Workshop', `${p.customLevels.length} custom`, () => app.show('workshop')),
         tile('Store', 'Spend your tips', () => openStore()),
         tile('Trophies', `${p.unlockedAchievements.length} earned`, () => openTrophies()),
@@ -58,8 +58,10 @@ export function renderMenu(app) {
       el('footer.menu__foot', [
         el('span', 'WASD / Arrows move · Space jump, again in mid-air for a second jump · '
           + 'Space on a wall to kick off · S slide, then Space for a long jump · '
-          + 'E dive toward the cursor · Hold click to charge a throw · '
-          + 'Shift boosts a vehicle, Q leaves it · R restarts · Esc pauses'),
+          + 'E dive toward the cursor · Hold click to charge a throw'),
+        el('span.menu__foot-key', 'Throw the bag upward, jump after it and catch it in mid-air '
+          + 'for a launch far higher than any jump — several levels need it.'),
+        el('span', 'Shift boosts a vehicle, Q leaves it · R restarts · Esc pauses'),
       ]),
     ]),
   ]);

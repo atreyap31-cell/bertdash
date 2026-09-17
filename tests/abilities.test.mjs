@@ -376,3 +376,102 @@ test('boost is one-shot until it recharges', () => {
   assert.equal(game.player.boost, 0, 'must not re-boost while recharging');
   assert.equal(finalStats(game, events).get('boosts') ?? 0, 1, 'exactly one boost was used');
 });
+
+// --- bag bounce ------------------------------------------------------------
+
+/** Throws the bag at a world point, mirroring the canvas pointer mapping. */
+function throwAt(game, canvas, worldX, worldY) {
+  const event = {
+    clientX: worldX - game.camera.x,
+    clientY: worldY - game.camera.y,
+    preventDefault() {},
+  };
+  canvas.dispatch('pointermove', event);
+  canvas.dispatch('pointerdown', event);
+  canvas.dispatch('pointerup', event);
+}
+
+test('catching the bag in mid-air launches you far above jump height', () => {
+  // Baseline: how high a plain running jump gets.
+  const plain = boot();
+  advance(40);
+  const groundY = plain.game.player.y;
+  keys.down('KeyD');
+  jump(16);
+  let plainPeak = 0;
+  for (let i = 0; i < 80; i++) { advance(1); plainPeak = Math.max(plainPeak, groundY - plain.game.player.y); }
+  keys.up('KeyD');
+  plain.game.destroy();
+
+  // Now throw the bag straight up, jump into it, and catch it.
+  const { game, canvas } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(30);
+  throwAt(game, canvas, game.player.x + 40, game.player.y - 500);
+  advance(12);
+  jump(16);
+
+  let peak = 0;
+  for (let i = 0; i < 120; i++) { advance(1); peak = Math.max(peak, groundY - game.player.y); }
+  keys.up('KeyD');
+
+  assert.equal(game.player.hasFood, true, 'the bag should have been caught');
+  assert.ok(peak > plainPeak * 1.5,
+    `bag bounce (${peak.toFixed(0)}px) should clear far more than a plain jump (${plainPeak.toFixed(0)}px)`);
+  game.destroy();
+});
+
+test('the bag bounce refunds the air jump', () => {
+  const { game, canvas } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(30);
+  throwAt(game, canvas, game.player.x + 40, game.player.y - 500);
+  advance(12);
+
+  // Spend the air jump before the catch can happen, so the refund is visible.
+  keys.down('Space');
+  advance(2);
+  game.player.airJumps = 0;
+  advance(14);
+  keys.up('Space');
+
+  for (let i = 0; i < 60 && !game.player.hasFood; i++) advance(1);
+  keys.up('KeyD');
+
+  assert.equal(game.player.hasFood, true, 'the bag should have been caught');
+  assert.equal(game.player.airJumps, PHYSICS.airJumps, 'the catch should hand the air jump back');
+  game.destroy();
+});
+
+test('catching the bag on the ground does not launch you', () => {
+  const { game, canvas } = boot();
+  advance(40);
+  // Lob it almost straight up from standing and wait on the ground for it.
+  throwAt(game, canvas, game.player.x + 16, game.player.y - 500);
+
+  let launched = false;
+  for (let i = 0; i < 200; i++) {
+    advance(1);
+    if (game.player.hasFood) {
+      launched = game.player.vy < -12;
+      break;
+    }
+  }
+  assert.equal(launched, false, 'a catch made while standing is just a catch');
+  game.destroy();
+});
+
+test('the bag bounce is counted', () => {
+  const { game, canvas, events } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(30);
+  throwAt(game, canvas, game.player.x + 40, game.player.y - 500);
+  advance(12);
+  jump(16);
+  for (let i = 0; i < 60 && !game.player.hasFood; i++) advance(1);
+  keys.up('KeyD');
+  assert.ok((finalStats(game, events).get('bagBounces') ?? 0) >= 1, 'the bounce should be recorded');
+});

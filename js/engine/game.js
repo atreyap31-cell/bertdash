@@ -86,6 +86,7 @@ export class Game {
       wallLock: 0,
       coyote: 0,
       jumpBuffer: 0,
+      airTime: 0,
       airJumps: PHYSICS.airJumps,
       crouching: false,
       vehicle: null,
@@ -290,16 +291,16 @@ export class Game {
       if (p.type === 'moving' && p.range > 0) {
         if (p.velX) {
           const next = p.x + p.velX * p.dir;
-          if (next <= p.anchorX || next >= p.anchorX + p.range) p.dir *= -1;
+          if (next <= p.minX || next >= p.maxX) p.dir *= -1;
           const moved = p.velX * p.dir;
-          p.x += moved;
+          p.x = clamp(p.x + moved, p.minX, p.maxX);
           p.deltaX = moved;
         }
         if (p.velY) {
           const next = p.y + p.velY * p.dir;
-          if (next <= p.anchorY || next >= p.anchorY + p.range) p.dir *= -1;
+          if (next <= p.minY || next >= p.maxY) p.dir *= -1;
           const moved = p.velY * p.dir;
-          p.y += moved;
+          p.y = clamp(p.y + moved, p.minY, p.maxY);
           p.deltaY = moved;
         }
       }
@@ -398,7 +399,16 @@ export class Game {
       const lock = p.wallLock > 0 ? 0.25 : 1; // don't cancel a wall kick instantly
       if (steer !== 0) {
         const target = steer * baseSpeed;
-        p.vx += (target - p.vx) * control * lock;
+        const faster = Math.sign(p.vx) === steer && Math.abs(p.vx) > Math.abs(target);
+        if (faster) {
+          // Steering must never scrub speed you already have in that
+          // direction. Without this, holding forward out of a long jump or a
+          // dive drags you straight back to running pace and the move covers
+          // less ground than an ordinary jump.
+          p.vx *= p.grounded ? PHYSICS.groundMomentumBleed : PHYSICS.airMomentumBleed;
+        } else {
+          p.vx += (target - p.vx) * control * lock;
+        }
         p.facingRight = steer > 0;
       } else if (p.grounded) {
         p.vx *= phys.friction;
@@ -540,7 +550,8 @@ export class Game {
     }
 
     // Landing refills the air jump.
-    if (p.grounded) p.airJumps = PHYSICS.airJumps;
+    if (p.grounded) { p.airJumps = PHYSICS.airJumps; p.airTime = 0; }
+    else p.airTime++;
 
     // Ride moving platforms and conveyors.
     if (p.grounded && p.groundPlatform) {
@@ -736,7 +747,7 @@ export class Game {
     this.food.magnetised = false;
     this.food.x = originX - FOOD_SIZE / 2;
     this.food.y = originY - FOOD_SIZE / 2;
-    this.food.vx = (dx / dist) * power + p.vx * 0.4;
+    this.food.vx = (dx / dist) * power + p.vx * PHYSICS.throwInherit;
     this.food.vy = (dy / dist) * power;
     this.food.catchCooldown = PHYSICS.catchCooldown;
 
@@ -799,6 +810,20 @@ export class Game {
         if (magnetActive) this.#bump('magnetCatches');
         audio.catchFood();
         this.#spawnParticles(f.x + f.size / 2, f.y + f.size / 2, 6, COLORS.food);
+
+        // The bag bounce. Catching it in mid-air launches you well above jump
+        // height and hands the air jump back, so a throw is a way to travel.
+        if (!p.grounded && p.airTime >= PHYSICS.catchBoostMinAir) {
+          p.vy = PHYSICS.catchBoost * this.level.physics.jumpForceScale;
+          p.vx *= PHYSICS.catchBoostForward;
+          p.airJumps = PHYSICS.airJumps;
+          p.diving = false;
+          p.diveTimer = 0;
+          this.#bump('bagBounces');
+          audio.win(3);
+          this.shake = this.reducedFlash ? 2 : 7;
+          this.#spawnParticles(p.x + p.width / 2, p.y + p.height / 2, 18, COLORS.food);
+        }
         return;
       }
     }
@@ -826,7 +851,7 @@ export class Game {
     let x = originX;
     let y = originY;
     const power = this.throwPower();
-    let vx = (dx / dist) * power + p.vx * 0.4;
+    let vx = (dx / dist) * power + p.vx * PHYSICS.throwInherit;
     let vy = (dy / dist) * power;
     const gravity = PHYSICS.foodGravity * this.level.physics.gravityScale;
     const points = [];

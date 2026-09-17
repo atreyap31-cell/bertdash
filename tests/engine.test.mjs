@@ -8,7 +8,7 @@ installGlobals();
 
 const { Game } = await import('../js/engine/game.js');
 const { prepareLevel, computeParTime, starsForTime } = await import('../js/engine/level.js');
-const { LEVELS } = await import('../js/data/levels.js');
+const { LEVELS, CAMPAIGN_LENGTH } = await import('../js/data/levels.js');
 
 const FLOOR_Y = 500;
 
@@ -390,7 +390,8 @@ test('destroy stops the loop and removes listeners', () => {
 // --- level data integrity --------------------------------------------------
 
 test('every shipped level prepares and is internally consistent', () => {
-  assert.equal(LEVELS.length, 34);
+  assert.ok(LEVELS.length >= 34, 'the campaign should not shrink');
+  assert.equal(LEVELS.length, CAMPAIGN_LENGTH + 1, 'CAMPAIGN_LENGTH excludes the tutorial');
   for (const raw of LEVELS) {
     const level = prepareLevel(raw);
     const where = `level ${raw.id} (${raw.title})`;
@@ -431,8 +432,10 @@ test('par times are sane and stars are monotonic', () => {
 });
 
 test('every level is reachable from the level select', () => {
-  // The menu offers LEVELS.slice(1) as levels 1..33 plus the tutorial at 0.
+  // The menu offers LEVELS.slice(1) as levels 1..N plus the tutorial at 0, so
+  // the ids have to be a gapless run starting at 0 or the buttons mislabel.
   assert.equal(LEVELS[0].id, 0);
   const ids = LEVELS.map(l => l.id);
-  assert.deepEqual(ids, [...Array(34).keys()], 'level ids should be 0..33 in order');
+  assert.deepEqual(ids, [...Array(LEVELS.length).keys()],
+    `level ids should be 0..${LEVELS.length - 1} in order`);
 });

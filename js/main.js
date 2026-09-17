@@ -7,7 +7,7 @@ import { Hud } from './ui/hud.js';
 import { Editor } from './ui/editor.js';
 import { Game } from './engine/game.js';
 import { computeParTime, starsForTime } from './engine/level.js';
-import { LEVELS } from './data/levels.js';
+import { LEVELS, CAMPAIGN_LENGTH } from './data/levels.js';
 import { SKINS, VIEW_W, VIEW_H } from './data/config.js';
 import { profile } from './services/profile.js';
 import { audio } from './services/audio.js';
@@ -136,7 +136,7 @@ class App {
     });
 
     const hud = new Hud({
-      levelLabel: target.isCustom ? 'Custom' : `${target.index}/33`,
+      levelLabel: target.isCustom ? 'Custom' : `${target.index}/${CAMPAIGN_LENGTH}`,
       levelTitle: target.level.title,
       parTime: game.level.parTime,
       best: profile.getBest(levelId),

@@ -1,6 +1,6 @@
 # BertDash
 
-A browser platformer about delivering a takeaway bag across 34 hand-built levels.
+A browser platformer about delivering a takeaway bag across 46 hand-built levels.
 Run, slide, dive and wall-jump to Bert before the food goes cold — and whatever
 you do, don't drop the bag.
 
@@ -20,6 +20,7 @@ No install, no build step, no accounts. Progress is saved in your browser.
 | `S` then `Space` | **Long jump** — trades the slide's momentum for distance |
 | `E` | **Dive** toward the cursor, from the ground or mid-air. Land one fast and it rebounds |
 | Hold click | **Charge a throw**, release to let the bag go. A dotted arc previews the landing |
+| Catch it mid-air | **Bag bounce** — launches you ~320px, nearly double a jump, and refunds the air jump |
 | `Shift` | **Boost** while riding a vehicle |
 | `Q` | Leave a vehicle (it stays where you left it, and can be re-boarded) |
 | `R` | Restart the level |
@@ -27,6 +28,27 @@ No install, no build step, no accounts. Progress is saved in your browser.
 
 Throwing the bag is the risk/reward mechanic: your hands are free so you move
 faster, but if the bag touches anything before you catch it, the delivery fails.
+
+It is also how you climb. The bag keeps your full horizontal momentum, so
+tossing it straight up while running leaves it travelling alongside you — jump
+into it, catch it in mid-air, and the catch launches you higher than any jump
+can reach. Several levels have shelves that are deliberately out of reach any
+other way.
+
+### What each move is worth
+
+Measured from the engine by `tools/measure.mjs`:
+
+| Move | Rise | Gap |
+| --- | --- | --- |
+| Running jump | 179 | 329 |
+| + air jump | 223 | 531 |
+| Long jump (from a slide) | 112 | 712 |
+| Long jump + air jump | 135 | 1139 |
+| Dive | 148 | 816 |
+| **Bag bounce** | **320** | 416 |
+| **Bag bounce + air jump** | **320** | 695 |
+| Wall shaft climb | 847 | — |
 
 ### Pickups
 
@@ -54,14 +76,17 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-58 tests across four suites:
+66 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
   cannot be abused (no infinite air jumps, no free shields, no stuck crouch)
-- `fuzz` — drives all 34 levels with pseudo-random input across three seeds
+- `fuzz` — drives all 46 levels with pseudo-random input across three seeds
   (~61k simulated frames) and asserts the simulation never breaks its own
   rules: no NaN, no escaping the level, no clipping into solid geometry
+- `reachability` — builds a graph of every standable surface in all 46 levels
+  and breadth-first searches from spawn to goal, so no level can ship with a
+  shelf nothing can reach
 - `profile` — save data, achievement rules, peer-code encoding
 
 They run in plain Node against a small DOM stub in `tests/harness.mjs` — no

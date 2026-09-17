@@ -25,6 +25,7 @@ const DEFAULT_STATS = {
   boosts: 0,
   shieldsUsed: 0,
   chargedThrows: 0,
+  bagBounces: 0,
   magnetCatches: 0,
   levelsCleared: 0,
   customCleared: 0,

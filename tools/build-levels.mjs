@@ -1,0 +1,334 @@
+// Generates the campaign's new act (levels 34-45) and rewrites js/data/levels.js.
+//
+// Every gap and rise is sized against the movement envelope that
+// tools/measure.mjs reports from the real engine, so nothing asks for a jump
+// the player cannot make:
+//
+//   move                rise   gap
+//   running jump         179   329
+//   + air jump           223   531
+//   long jump            112   712
+//   long jump + air      135  1139
+//   dive                 148   816
+//   bag bounce           320   416
+//   bag bounce + air     320   695
+//   wall shaft climb     847     -
+//
+// The important consequence: nothing except the bag bounce clears a rise above
+// ~230px without a wall. Ledges placed 250-310px up are therefore bag-bounce
+// gates, and several levels here are built on exactly that.
+
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '..');
+
+// --- piece helpers ---------------------------------------------------------
+
+const solid = (x, y, width, height = 200) => ({ x, y, width, height, type: 'static' });
+const ledge = (x, y, width = 160) => ({ x, y, width, height: 20, type: 'static' });
+const wall = (x, y, height, width = 40) => ({ x, y, width, height, type: 'static' });
+const spikes = (x, y, width) => ({ x, y, width, height: 20, type: 'spike' });
+const vanish = (x, y, width = 140) => ({ x, y, width, height: 20, type: 'vanishing', opacity: 1 });
+const belt = (x, y, width, conveyorVel) => ({ x, y, width, height: 20, type: 'static', conveyorVel });
+
+const mover = (x, y, width, { velX = 0, velY = 0, range = 240 } = {}) => ({
+  x, y, width, height: 20, type: 'moving', velX, velY, range, startPos: { x, y },
+});
+
+const laser = (x, y, height, { interval = 2000, offset = 0 } = {}) => ({
+  x, y, width: 10, height, type: 'laser', interval, offset,
+});
+
+const door = (x, y, height, { width = 40, interval = 3000, offset = 0 } = {}) => ({
+  x, y, width, height, type: 'door', interval, offset,
+});
+
+const pickup = (type, x, y) => ({
+  id: `pu-${type}-${x}-${y}`, type, pos: { x, y }, width: 30, height: 30,
+});
+
+const ride = (type, x, y) => ({
+  id: `v-${type}-${x}`, type, pos: { x, y },
+  width: type === 'car' ? 80 : 56, height: type === 'car' ? 40 : 34,
+});
+
+function level(id, title, description, body) {
+  return {
+    id, title, description, isFinalLevel: false,
+    vehicles: [], powerups: [], physics: {}, ...body,
+  };
+}
+
+const NEW = [];
+
+// 34 — the air jump, on gaps a single jump cannot clear.
+NEW.push(level(34, 'DOUBLE SHIFT', 'Two jumps. You will need both.', {
+  width: 4600, height: 700, theme: 'horizontal', background: '#111827',
+  startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 },
+  goalPos: { x: 4400, y: 450 },
+  platforms: [
+    solid(0, 500, 560),
+    ledge(1000, 470, 200),   // 440 gap: past a plain jump
+    ledge(1640, 440, 200),
+    ledge(2280, 470, 200),
+    solid(2900, 500, 300),
+    ledge(3600, 430, 200),
+    solid(4180, 500, 420),
+    spikes(3220, 680, 340),
+  ],
+}));
+
+// 35 — a shaft climbed on wall kicks alone.
+NEW.push(level(35, 'THE SHAFT', 'Kick off the walls. Do not look down.', {
+  width: 800, height: 3000, theme: 'vertical', background: '#0f172a',
+  startPos: { x: 360, y: 2870 }, foodPos: { x: 400, y: 2870 },
+  goalPos: { x: 400, y: 200 },
+  platforms: [
+    solid(0, 2920, 800, 80),
+    wall(150, 300, 2620, 60),
+    wall(590, 300, 2620, 60),
+    ledge(250, 2300, 300),
+    ledge(250, 1500, 300),
+    ledge(250, 700, 300),
+    solid(200, 250, 400, 40),
+  ],
+  physics: { wallSlideEnabled: true },
+}));
+
+// 36 — long jumps only. Plain jumps fall short of every gap.
+NEW.push(level(36, 'LONG HAUL', 'Slide first. A standing jump will not reach.', {
+  width: 5200, height: 700, theme: 'horizontal', background: '#1e1b4b',
+  startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 },
+  goalPos: { x: 5020, y: 450 },
+  platforms: [
+    solid(0, 500, 640),
+    solid(1240, 500, 640),   // 600 gaps: long-jump range
+    solid(2480, 500, 640),
+    solid(3720, 500, 640),
+    solid(4880, 500, 320),
+    spikes(700, 680, 480),
+    spikes(1940, 680, 480),
+    spikes(3180, 680, 480),
+    spikes(4420, 680, 400),
+  ],
+}));
+
+// 37 — THE BAG BOUNCE. Every shelf is too high for any jump; the only way up
+//      is to throw the bag, jump after it and catch it. Magnets soften the
+//      learning curve, and the last one is removed.
+NEW.push(level(37, 'UP AND OVER', 'Throw the bag up. Jump. Catch it. Ride it.', {
+  width: 4400, height: 1100, theme: 'horizontal', background: '#312e81',
+  startPos: { x: 90, y: 852 }, foodPos: { x: 130, y: 852 },
+  goalPos: { x: 4230, y: 220 },
+  platforms: [
+    solid(0, 900, 640),
+    ledge(760, 620, 240),    // 280 up: above an air jump, inside a bag bounce
+    ledge(1300, 620, 240),
+    ledge(1300, 340, 240),   // another 280 up
+    ledge(1900, 620, 240),
+    ledge(2480, 340, 240),
+    ledge(3060, 620, 240),
+    ledge(3620, 340, 240),
+    solid(4120, 280, 280, 820),
+    spikes(660, 1080, 3440),
+  ],
+  powerups: [
+    pickup('magnet', 300, 840),
+    pickup('magnet', 1360, 560),
+    pickup('magnet', 2540, 280),
+  ],
+}));
+
+// 38 — bag bounce chained with the air jump, over real drops.
+NEW.push(level(38, 'AIR MAIL', 'Bounce, then jump again at the top.', {
+  width: 5000, height: 1300, theme: 'horizontal', background: '#0c4a6e',
+  startPos: { x: 90, y: 1052 }, foodPos: { x: 130, y: 1052 },
+  goalPos: { x: 4820, y: 260 },
+  platforms: [
+    solid(0, 1100, 560),
+    ledge(900, 820, 220),
+    ledge(1560, 540, 220),   // 280 rises, stacked
+    ledge(2220, 820, 220),
+    ledge(2880, 540, 220),
+    ledge(3540, 300, 220),   // 240 up from the last, needs the air jump on top
+    solid(4180, 320, 820, 980),
+    spikes(600, 1280, 3520),
+  ],
+  powerups: [pickup('magnet', 300, 1040), pickup('magnet', 2280, 760)],
+}));
+
+// 39 — laser corridor, with shields as the margin for error.
+NEW.push(level(39, 'SHIELDED', 'A shield buys you exactly one mistake.', {
+  width: 4600, height: 700, theme: 'horizontal', background: '#450a0a',
+  startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 },
+  goalPos: { x: 4420, y: 450 },
+  platforms: [
+    solid(0, 500, 4600),
+    ...Array.from({ length: 9 }, (_, i) =>
+      laser(720 + i * 420, 220, 280, { interval: 2000, offset: i * 220 })),
+  ],
+  powerups: [
+    pickup('shield', 420, 440),
+    pickup('shield', 2120, 440),
+    pickup('shield', 3500, 440),
+    pickup('speed', 1320, 440),
+  ],
+}));
+
+// 40 — a car, a long straight, and the boost.
+NEW.push(level(40, 'BOOST ALLEY', 'Shift to boost. Mind the gaps.', {
+  width: 6000, height: 700, theme: 'horizontal', background: '#172554',
+  startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 },
+  goalPos: { x: 5840, y: 450 },
+  platforms: [
+    solid(0, 500, 1400),
+    solid(1780, 500, 1220),
+    solid(3380, 500, 1220),
+    solid(4980, 500, 1020),
+    spikes(1420, 680, 340),
+    spikes(3020, 680, 340),
+    spikes(4620, 680, 340),
+  ],
+  vehicles: [ride('car', 420, 460), ride('car', 2100, 460), ride('car', 3700, 460)],
+}));
+
+// 41 — crawl tunnels and belts. Slide, or stop.
+NEW.push(level(41, 'CRAWLSPACE', 'Some of this is too low to stand up in.', {
+  width: 4800, height: 700, theme: 'horizontal', background: '#1c1917',
+  startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 },
+  goalPos: { x: 4620, y: 450 },
+  platforms: [
+    solid(0, 500, 4800),
+    solid(700, 380, 520, 90),    // 30px crawl space above the floor
+    solid(1760, 380, 520, 90),
+    solid(2960, 380, 520, 90),
+    belt(1320, 480, 380, 4),
+    belt(2420, 480, 440, -3),
+    belt(3620, 480, 420, 5),
+    spikes(4120, 480, 200),
+  ],
+}));
+
+// 42 — vanishing steps up a shaft, with walls to recover on.
+NEW.push(level(42, 'THE GAUNTLET', 'Nothing you stand on stays.', {
+  width: 800, height: 3400, theme: 'vertical', background: '#134e4a',
+  startPos: { x: 360, y: 3270 }, foodPos: { x: 400, y: 3270 },
+  goalPos: { x: 400, y: 210 },
+  platforms: [
+    solid(0, 3320, 800, 80),
+    wall(70, 400, 2800, 50),
+    wall(680, 400, 2800, 50),
+    ...Array.from({ length: 15 }, (_, i) =>
+      vanish(i % 2 === 0 ? 190 : 430, 3060 - i * 195, 180)),
+    solid(250, 260, 300, 40),
+  ],
+  physics: { wallSlideEnabled: true },
+}));
+
+// 43 — low gravity: long floaty arcs, and the bag hangs longer too.
+NEW.push(level(43, 'SKY COURIER', 'Low gravity. Everything hangs.', {
+  width: 5400, height: 1100, theme: 'horizontal', background: '#1e3a8a',
+  startPos: { x: 90, y: 852 }, foodPos: { x: 130, y: 852 },
+  goalPos: { x: 5220, y: 300 },
+  platforms: [
+    solid(0, 900, 540),
+    ledge(920, 800, 200),
+    ledge(1520, 680, 200),
+    ledge(2120, 560, 200),
+    ledge(2720, 460, 200),
+    ledge(3320, 560, 200),
+    ledge(3920, 440, 200),
+    ledge(4520, 360, 200),
+    solid(5040, 340, 360, 760),
+    mover(1200, 620, 160, { velX: 2.5, range: 240 }),
+    mover(3720, 300, 160, { velY: 2, range: 200 }),
+  ],
+  powerups: [pickup('jump', 960, 740), pickup('speed', 3360, 500)],
+  physics: { gravityScale: 0.55 },
+}));
+
+// 44 — timed doors and shuttles. Read the rhythm.
+NEW.push(level(44, 'RUSH HOUR', 'Everything here is on a timer.', {
+  width: 5200, height: 800, theme: 'horizontal', background: '#3f3f46',
+  startPos: { x: 90, y: 552 }, foodPos: { x: 130, y: 552 },
+  goalPos: { x: 5020, y: 550 },
+  platforms: [
+    solid(0, 600, 720),
+    solid(1520, 600, 520),
+    solid(2920, 600, 520),
+    solid(4320, 600, 880),
+    mover(840, 540, 220, { velX: 3.2, range: 420 }),
+    mover(2140, 540, 220, { velX: -3.2, range: 420 }),
+    mover(3540, 540, 220, { velX: 3.2, range: 420 }),
+    door(1720, 380, 220, { interval: 2600, offset: 0 }),
+    door(3120, 380, 220, { interval: 2600, offset: 1300 }),
+    door(4520, 380, 220, { interval: 2600, offset: 650 }),
+    spikes(740, 780, 760),
+    spikes(2060, 780, 840),
+    spikes(3460, 780, 840),
+  ],
+}));
+
+// 45 — the closer: long jumps, a wall, bag bounces and a laser run.
+NEW.push(level(45, 'LAST DELIVERY', 'Everything Bert taught you, in one shift.', {
+  width: 6600, height: 1200, theme: 'horizontal', background: '#0b0b12',
+  startPos: { x: 90, y: 952 }, foodPos: { x: 130, y: 952 },
+  goalPos: { x: 6400, y: 300 },
+  platforms: [
+    solid(0, 1000, 580),
+    // Long-jump stretch
+    solid(1180, 1000, 480),
+    solid(2260, 1000, 480),
+    spikes(620, 1180, 540),
+    spikes(1700, 1180, 540),
+    // Wall kick section
+    wall(2820, 460, 540),
+    wall(3260, 460, 540),
+    ledge(2900, 960, 320),
+    solid(3340, 1000, 420),
+    // Bag-bounce steps: 280 up each, nothing else reaches
+    ledge(3980, 720, 200),
+    ledge(4520, 440, 200),
+    // Laser run to the finish
+    solid(5000, 380, 1600, 820),
+    laser(5240, 100, 280, { interval: 1800, offset: 0 }),
+    laser(5580, 100, 280, { interval: 1800, offset: 600 }),
+    laser(5920, 100, 280, { interval: 1800, offset: 1200 }),
+    laser(6220, 100, 280, { interval: 1800, offset: 300 }),
+  ],
+  powerups: [
+    pickup('shield', 300, 940),
+    pickup('magnet', 3400, 940),
+    pickup('speed', 5060, 320),
+  ],
+  physics: { wallSlideEnabled: true },
+  isFinalLevel: true,
+}));
+
+// --- rewrite levels.js -----------------------------------------------------
+
+const levelsPath = join(ROOT, 'js/data/levels.js');
+const source = readFileSync(levelsPath, 'utf8');
+
+const marker = 'export const LEVELS = ';
+const start = source.indexOf(marker) + marker.length;
+const end = source.indexOf(';\n', start);
+const existing = JSON.parse(source.slice(start, end));
+
+// Drop anything this script generated before, so it can be re-run.
+const base = existing.filter(l => l.id < 34);
+const combined = [...base, ...NEW];
+
+const header = source.slice(0, source.indexOf(marker));
+const footer = source.slice(source.indexOf('\n\nexport const CAMPAIGN_LENGTH'));
+writeFileSync(levelsPath, `${header}${marker}${JSON.stringify(combined)};${footer}`);
+
+console.log(`levels.js: ${combined.length} levels (${base.length} existing + ${NEW.length} new)\n`);
+for (const l of NEW) {
+  console.log(`  ${String(l.id).padStart(2)}  ${l.title.padEnd(16)} ${l.theme.padEnd(10)} `
+    + `${String(l.width).padStart(4)}x${String(l.height).padStart(4)}  `
+    + `${String(l.platforms.length).padStart(3)} pieces`);
+}

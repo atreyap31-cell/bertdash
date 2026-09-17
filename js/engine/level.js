@@ -6,10 +6,14 @@
 
 import { PHYSICS, POWERUP_BY_ID, VIEW_W, VIEW_H } from '../data/config.js';
 
-// Authored ranges go up to 5000px. A platform that takes 20 seconds to come
-// back is not a platform you can plan around, so the sweep is capped to
-// something you can stand and wait for.
-const MAX_MOVE_RANGE = 480;
+// A horizontal shuttle that sweeps thousands of pixels is not something you can
+// plan around — it is off-screen when you need it — so side-to-side travel is
+// capped at a distance you can stand and wait for.
+//
+// Vertical travel is left alone: a lift that climbs the whole level is exactly
+// what "ELEVATOR ACTION" and "SPACE ELEVATOR" are built around, and capping it
+// left both levels impossible to finish.
+const MAX_SHUTTLE_RANGE = 600;
 
 // Platforms this thin are ledges you can jump up through; anything chunkier is
 // treated as solid masonry. Vertical levels are built almost entirely from
@@ -73,8 +77,12 @@ function preparePlatform(source) {
     // to wherever the platform was placed.
     anchorX: source.startPos?.x ?? source.x,
     anchorY: source.startPos?.y ?? source.y,
-    range: Math.min(source.range ?? 0, MAX_MOVE_RANGE),
+    range: source.velY
+      ? (source.range ?? 0)
+      : Math.min(source.range ?? 0, MAX_SHUTTLE_RANGE),
     dir: 1,
+    // Travel bounds, filled in below.
+    minX: 0, maxX: 0, minY: 0, maxY: 0,
     // Per-frame delta, used to carry riders along with the platform.
     deltaX: 0,
     deltaY: 0,
@@ -94,11 +102,23 @@ function preparePlatform(source) {
   if (platform.type === 'moving' && platform.range <= 0) {
     platform.range = 160;
   }
-  // Clamp the starting position into its own travel window so it doesn't
-  // teleport on the first frame.
+
   if (platform.type === 'moving') {
-    if (platform.velX) platform.x = clamp(platform.x, platform.anchorX, platform.anchorX + platform.range);
-    if (platform.velY) platform.y = clamp(platform.y, platform.anchorY, platform.anchorY + platform.range);
+    // Travel extends from the anchor in the direction the platform is heading.
+    // Assuming it always extends towards +x/+y sends any platform authored
+    // with a negative velocity the wrong way — which sank the lifts in
+    // ELEVATOR ACTION and SPACE ELEVATOR straight out of the level.
+    const spanX = platform.velX ? platform.range : 0;
+    const spanY = platform.velY ? platform.range : 0;
+    platform.minX = platform.velX >= 0 ? platform.anchorX : platform.anchorX - spanX;
+    platform.maxX = platform.velX >= 0 ? platform.anchorX + spanX : platform.anchorX;
+    platform.minY = platform.velY >= 0 ? platform.anchorY : platform.anchorY - spanY;
+    platform.maxY = platform.velY >= 0 ? platform.anchorY + spanY : platform.anchorY;
+
+    // Keep the starting position inside its own window so it cannot teleport
+    // on the first frame.
+    if (platform.velX) platform.x = clamp(platform.x, platform.minX, platform.maxX);
+    if (platform.velY) platform.y = clamp(platform.y, platform.minY, platform.maxY);
   }
   return platform;
 }

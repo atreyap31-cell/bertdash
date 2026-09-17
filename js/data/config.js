@@ -1,5 +1,7 @@
 // Tuning constants, cosmetics and achievement definitions.
 
+import { CAMPAIGN_LENGTH } from './levels.js';
+
 // Physics are expressed per-frame at SIM_FPS; the engine steps a fixed
 // timestep so behaviour is identical on 60Hz and 144Hz displays.
 export const SIM_FPS = 60;
@@ -20,6 +22,10 @@ export const PHYSICS = {
   // straight through a platform between two sub-steps.
   maxSpeedX: 34,
   airControl: 0.78,       // steering authority kept mid-air
+  // How fast speed above your normal run bleeds off while steering into it.
+  // Close to 1 so a long jump or dive keeps the momentum that defines it.
+  airMomentumBleed: 0.994,
+  groundMomentumBleed: 0.97,
   coyoteFrames: 7,        // grace period after walking off an edge
   jumpBufferFrames: 7,    // remembers a jump pressed just before landing
 
@@ -57,7 +63,18 @@ export const PHYSICS = {
   throwChargeFrames: 40,
   throwChargeBonus: 0.9,  // +90% strength at full charge
   foodGravity: 0.28,
-  catchRadius: 46,
+  // Catching the bag out of the air launches you: throw it up and ahead, jump
+  // after it, and the catch kicks you far higher than any jump can. This is a
+  // traversal move, not a bonus, and several levels are built around it.
+  catchBoost: -21.5,
+  catchBoostForward: 1.25,  // horizontal momentum multiplier on the launch
+  catchBoostMinAir: 4,      // frames off the ground before it counts
+  // The bag keeps your full horizontal momentum. Toss it straight up while
+  // running and it travels exactly alongside you, so jumping into it is a
+  // reliable move rather than a timing trick — that is what makes the bag
+  // bounce usable as traversal.
+  throwInherit: 1,
+  catchRadius: 58,
   magnetCatchRadius: 132,
   catchCooldown: 12,
   emptyHandBonus: 1.3,    // you move faster once the food is out of your hands
@@ -135,7 +152,7 @@ export const ACHIEVEMENTS = [
   { id: 'level_10',     title: 'Pro',            description: 'Complete Level 10',             icon: '✓', check: p => p.bestLevelTimes[10] != null },
   { id: 'level_20',     title: 'Veteran',        description: 'Complete Level 20',             icon: '✓', check: p => p.bestLevelTimes[20] != null },
   { id: 'level_30',     title: 'Master',         description: 'Complete Level 30',             icon: '✓', check: p => p.bestLevelTimes[30] != null },
-  { id: 'legend',       title: 'Legend',         description: 'Complete every campaign level', icon: '♛', check: p => p.stats.levelsCleared >= 33 },
+  { id: 'legend',       title: 'Legend',         description: 'Complete every campaign level', icon: '♛', check: p => p.stats.levelsCleared >= CAMPAIGN_LENGTH },
   { id: 'throw_1',      title: 'Yeet',           description: 'Throw the food',                icon: '➶', check: p => p.stats.foodThrown >= 1 },
   { id: 'throw_50',     title: 'Quarterback',    description: 'Throw food 50 times',           icon: '➶', check: p => p.stats.foodThrown >= 50 },
   { id: 'catch_1',      title: 'Safe Hands',     description: 'Catch the food mid-air',        icon: '✋', check: p => p.stats.foodCaught >= 1 },
@@ -158,6 +175,9 @@ export const ACHIEVEMENTS = [
   { id: 'shield_1',     title: 'Deflected',      description: 'Survive a hazard with a shield', icon: '◇', check: p => p.stats.shieldsUsed >= 1 },
   { id: 'magnet_1',     title: 'Tractor Beam',   description: 'Reel the bag in with a magnet', icon: '◎', check: p => p.stats.magnetCatches >= 1 },
   { id: 'boost_1',      title: 'Nitro',          description: 'Boost a vehicle',               icon: '≫', check: p => p.stats.boosts >= 1 },
+  { id: 'bounce_bag_1', title: 'Bag Bounce',     description: 'Catch the bag in mid-air for a launch', icon: '↥', check: p => p.stats.bagBounces >= 1 },
+  { id: 'bounce_bag_25',title: 'Air Courier',    description: 'Launch off the bag 25 times',   icon: '↥', check: p => p.stats.bagBounces >= 25 },
+  { id: 'bounce_bag_100',title: 'Bag Rider',     description: 'Launch off the bag 100 times',  icon: '↥', check: p => p.stats.bagBounces >= 100 },
   { id: 'skin_1',       title: 'Fashionista',    description: 'Buy a skin',                    icon: '◈', check: p => p.unlockedSkins.length >= 2 },
   { id: 'skin_5',       title: 'Wardrobe',       description: 'Unlock 5 skins',                icon: '◈', check: p => p.unlockedSkins.length >= 5 },
   { id: 'collector',    title: 'Collector',      description: 'Unlock every skin',             icon: '◈', check: p => p.unlockedSkins.length >= SKINS.length },
