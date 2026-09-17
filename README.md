@@ -1,6 +1,6 @@
 # BertDash
 
-A browser platformer about delivering a takeaway bag across 46 hand-built levels.
+A browser platformer about delivering a takeaway bag across 55 hand-built levels.
 Run, slide, dive and wall-jump to Bert before the food goes cold — and whatever
 you do, don't drop the bag.
 
@@ -10,45 +10,61 @@ No install, no build step, no accounts. Progress is saved in your browser.
 
 ## Controls
 
+Keyboard only — there is no mouse.
+
+**Left hand: moving.**
+
 | Key | Action |
 | --- | --- |
-| `A` `D` / `←` `→` | Move |
-| `Space` / `W` / `↑` | Jump. Hold for height |
-| `Space` again in mid-air | **Air jump** — one per landing, steer while using it to redirect |
+| `A` `D` | Move |
+| `Space` / `W` | Jump. Hold for height |
+| `Space` again mid-air | **Air jump** — one per landing; steer while using it to redirect |
 | `Space` against a wall | **Wall kick** — launches you off and refunds the air jump |
-| `S` / `↓` | **Slide** — keeps your run-up speed and ducks under low ceilings |
+| `S` | **Slide** — keeps your run-up speed and ducks under low ceilings |
 | `S` then `Space` | **Long jump** — trades the slide's momentum for distance |
-| `E` | **Dive** toward the cursor, from the ground or mid-air. Land one fast and it rebounds |
-| Hold click | **Charge a throw**, release to let the bag go. A dotted arc previews the landing |
-| Catch it mid-air | **Bag bounce** — launches you ~320px, nearly double a jump, and refunds the air jump |
+| `E` | **Dive** — a flat dash, or a chase if the bag is in the air |
 | `Shift` | **Boost** while riding a vehicle |
-| `Q` | Leave a vehicle (it stays where you left it, and can be re-boarded) |
-| `R` | Restart the level |
-| `Esc` / `P` | Pause |
+| `Q` | Leave a vehicle (it stays put and can be re-boarded) |
+| `R` / `Esc` | Restart / pause |
 
-Throwing the bag is the risk/reward mechanic: your hands are free so you move
-faster, but if the bag touches anything before you catch it, the delivery fails.
+**Right hand: the bag.**
 
-It is also how you climb. The bag keeps your full horizontal momentum, so
-tossing it straight up while running leaves it travelling alongside you — jump
-into it, catch it in mid-air, and the catch launches you higher than any jump
-can reach. Several levels have shelves that are deliberately out of reach any
-other way.
+| Key | Action |
+| --- | --- |
+| `←` `↑` `→` `↓` | Aim. Hold to charge, release to throw |
+| Two arrows together | Throw on the diagonal |
 
-### What each move is worth
+Every control is rebindable in Settings, and an optional on-screen input
+overlay shows exactly what the engine is registering.
 
-Measured from the engine by `tools/measure.mjs`:
+### The bag is the whole game
 
-| Move | Rise | Gap |
-| --- | --- | --- |
-| Running jump | 179 | 329 |
-| + air jump | 223 | 531 |
-| Long jump (from a slide) | 112 | 712 |
-| Long jump + air jump | 135 | 1139 |
-| Dive | 148 | 816 |
-| **Bag bounce** | **320** | 416 |
-| **Bag bounce + air jump** | **320** | 695 |
-| Wall shaft climb | 847 | — |
+Your hands are free once it is thrown, so you move faster — but if the bag hits
+anything it takes damage, and the third hit loses the delivery.
+
+- **Bag bounce.** Throw it straight up while running, jump after it, catch it in
+  mid-air. The catch launches you ~320px, nearly double a jump, and hands back
+  your air jump. Several levels have shelves out of reach any other way.
+- **Dive to recover.** With the bag loose, `E` dives straight at it — so a throw
+  that went wrong is a scramble, not a loss.
+- **Deliver by throw.** Land the bag on Bert from range and the level is done.
+  It is the fastest finish available and the hardest to pull off.
+- **Momentum carries.** The bag inherits your full speed, so a throw made at a
+  sprint or off the top of a bounce goes far further than a standing toss.
+
+### Flow
+
+Every distinct move adds to a chain that decays if you stand still. Repeating
+one move is worth less than varying them, and the chain multiplies your tips at
+the end of the level — so the fastest route and the most stylish one are the
+same route. Throwing is worth the most, because it is the biggest risk.
+
+### Speedrun mode
+
+Turn it on in Settings and **Start Shift** runs the whole campaign against one
+clock, with a cumulative timer in the HUD and splits on the results screen. A
+death, a restart or leaving the campaign ends the run. The clock does not start
+until your first input, so reading a level is free.
 
 ### Pickups
 
@@ -76,12 +92,12 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-66 tests across five suites:
+84 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
   cannot be abused (no infinite air jumps, no free shields, no stuck crouch)
-- `fuzz` — drives all 46 levels with pseudo-random input across three seeds
+- `fuzz` — drives all 55 levels with pseudo-random input across three seeds
   (~61k simulated frames) and asserts the simulation never breaks its own
   rules: no NaN, no escaping the level, no clipping into solid geometry
 - `reachability` — builds a graph of every standable surface in all 46 levels

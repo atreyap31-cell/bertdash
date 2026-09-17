@@ -18,6 +18,14 @@ export class Hud {
     };
 
     this.chargeFill = el('div.charge-bar__fill');
+    this.flowValue = el('span.flow__value', '0');
+    this.flowMult = el('span.flow__mult', '');
+    this.flowFill = el('div.flow__fill');
+    this.flowEl = el('div.flow', [
+      el('div.flow__head', [el('span.flow__label', 'FLOW'), this.flowValue, this.flowMult]),
+      el('div.flow__bar', [this.flowFill]),
+    ]);
+    this.flowEl.hidden = true;
 
     // Ability readouts. These exist so the new moves are discoverable: you can
     // see at a glance whether the air jump is banked or the dive is cooling.
@@ -47,6 +55,7 @@ export class Hud {
             el('div.charge-bar', [this.chargeFill]),
           ]),
         ]),
+        this.flowEl,
         el('div.hud__abilities', Object.values(this.pips)),
         (this.buffsEl = el('div.hud__buffs')),
       ]),
@@ -60,7 +69,22 @@ export class Hud {
       ]),
     ]);
 
+    // Speedrun: a second clock showing the whole run, not just this level.
+    if (options.runTotalMs != null) {
+      this.runBase = options.runTotalMs;
+      this.runEl = el('div.hud__panel.hud__panel--run', [
+        el('div.stat', [
+          el('span.stat__label', 'Run total'),
+          (this.runValue = el('span.stat__value.stat__value--time', formatTime(options.runTotalMs))),
+        ]),
+      ]);
+      this.root.querySelector('.hud__left').prepend(this.runEl);
+    }
+
     this.values.level.textContent = options.levelLabel ?? '';
+    // The clock is held until the first input, so say so before the first frame.
+    this.values.time.textContent = 'READY';
+    this.values.time.classList.add('is-waiting');
     this.values.par.textContent = options.parTime != null ? `${options.parTime.toFixed(1)}s` : '—';
     this.values.best.textContent = options.best != null ? formatTime(options.best) : '—';
   }
@@ -68,11 +92,15 @@ export class Hud {
   /** @param {object} state from Game#getHudState */
   update(state) {
     const time = this.values.time;
-    time.textContent = formatTime(state.elapsed);
-    time.classList.toggle('is-over-par', state.elapsed / 1000 > state.parTime);
+    // The clock is held until the first input, so the time shown is time you
+    // actually spent playing rather than time spent reading the level.
+    time.textContent = state.started ? formatTime(state.elapsed) : 'READY';
+    time.classList.toggle('is-waiting', !state.started);
+    time.classList.toggle('is-over-par', state.started && state.elapsed / 1000 > state.parTime);
 
     const status = state.dead ? 'LOST'
-      : state.foodAirborne ? 'AIRBORNE'
+      : state.foodAirborne
+        ? (state.bagBouncesLeft === 0 ? 'FRAGILE!' : 'AIRBORNE')
       : state.hasFood ? 'IN HAND'
       : 'DROPPING';
     if (this.foodEl.textContent !== status) {
@@ -80,9 +108,21 @@ export class Hud {
       this.foodEl.dataset.status = status.toLowerCase();
     }
 
+    if (this.runValue) this.runValue.textContent = formatTime(this.runBase + state.elapsed);
+
     // Throw charge.
     this.chargeFill.style.width = `${Math.round(state.charge * 100)}%`;
     this.chargeFill.classList.toggle('is-full', state.charge >= 1);
+
+    // Flow chain.
+    const showFlow = state.flow > 0;
+    if (this.flowEl.hidden === showFlow) this.flowEl.hidden = !showFlow;
+    if (showFlow) {
+      this.flowValue.textContent = String(Math.round(state.flow));
+      this.flowMult.textContent = `×${state.flowMultiplier.toFixed(2)}`;
+      this.flowFill.style.width = `${Math.round(state.flowTimeLeft * 100)}%`;
+      this.flowEl.classList.toggle('is-hot', state.flowRatio >= 0.999);
+    }
 
     // Ability availability.
     this.pips.air.classList.toggle('is-ready', state.airJumps > 0);

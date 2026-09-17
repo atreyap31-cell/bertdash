@@ -13,7 +13,14 @@ export const VIEW_H = 600;
 
 export const PHYSICS = {
   gravity: 0.55,
-  friction: 0.85,
+  // Ground friction, as a per-frame velocity multiplier. Zero means the player
+  // stops dead the instant they stop steering: no drift, no skating after a
+  // landing, nothing between "moving" and "stopped". Slipperiness is a level
+  // mechanic, not a baseline — levels that want ice set `friction` themselves
+  // (see COLD STORAGE and CORPORATE LOBBY).
+  friction: 0,
+  // Anything below this simply stops, so an icy level still settles eventually.
+  stopThreshold: 0.6,
   jumpForce: -15,
   moveSpeed: 7,
   terminalVelocity: 16,
@@ -21,7 +28,15 @@ export const PHYSICS = {
   // add to vx, and without a cap they can compound into speeds that tunnel
   // straight through a platform between two sub-steps.
   maxSpeedX: 34,
-  airControl: 0.78,       // steering authority kept mid-air
+  // Acceleration. These are per-frame lerp factors towards the target speed.
+  // They exist because the ground value used to be 1 — velocity snapped to
+  // full speed in a single frame, which gave movement no weight at all and
+  // read as twitchy. 0.22 reaches full speed in roughly ten frames.
+  groundAccel: 0.22,
+  airAccel: 0.09,
+  // Reversing is sharper than accelerating from a standstill, so the controls
+  // stay responsive without the whole thing feeling frictionless.
+  turnAccel: 2.4,
   // How fast speed above your normal run bleeds off while steering into it.
   // Close to 1 so a long jump or dive keeps the momentum that defines it.
   airMomentumBleed: 0.994,
@@ -39,8 +54,11 @@ export const PHYSICS = {
   // brief stick at the top gives you time to aim the kick.
   wallSlideSpeed: 2.2,
   wallStickFrames: 9,
-  wallJump: { x: 12.5, y: -15 },
-  wallJumpLockFrames: 8,  // steering damped briefly so the kick actually lands
+  // Tuned against the measured shaft climb: enough outward push to cross a
+  // shaft, little enough that you can steer back into the wall for the next
+  // kick now that air acceleration is gradual rather than instant.
+  wallJump: { x: 8, y: -15.5 },
+  wallJumpLockFrames: 5,  // steering damped briefly so the kick actually lands
 
   // Slide, and the long jump that comes out of it.
   slideSpeed: 16,
@@ -57,6 +75,7 @@ export const PHYSICS = {
   diveBounce: -11.5,
   diveBounceMinSpeed: 8,
   diveGravityScale: 0.35, // dives stay flat instead of drooping
+  diveGroundLift: -3.4,   // a ground dash skims rather than scraping
 
   // Throwing. Hold to charge for a longer throw.
   throwStrength: 9,
@@ -74,7 +93,17 @@ export const PHYSICS = {
   // reliable move rather than a timing trick — that is what makes the bag
   // bounce usable as traversal.
   throwInherit: 1,
+  // Vertical momentum carries too, so a throw released at the top of a jump or
+  // out of a bag bounce is launched much harder than one made standing still.
+  throwInheritY: 0.75,
+  // Speed itself adds power: winding up on the run throws further than a
+  // standing toss, which is what makes a running delivery worth setting up.
+  throwSpeedBonus: 0.05,   // extra power per px/frame of player speed
+  throwSpeedBonusMax: 0.6, // capped at +60%
   catchRadius: 58,
+  // A thrown bag that reaches Bert completes the delivery. Landing one is the
+  // fastest way to finish a level and the hardest to pull off.
+  goalCatchRadius: 90,
   magnetCatchRadius: 132,
   catchCooldown: 12,
   emptyHandBonus: 1.3,    // you move faster once the food is out of your hands
@@ -85,12 +114,84 @@ export const PHYSICS = {
   boostFrames: 80,
   boostRecharge: 200,
 
+  // The bag survives a couple of glancing hits before the delivery is blown.
+  // A throw that touches anything used to be an instant loss, which made
+  // throwing a coin flip rather than a decision; now a bad throw is a scramble
+  // you can still recover from.
+  bagBounceLimit: 2,
+  bagBounceDamp: 0.55,
+  bagRestSpeed: 1.2,      // slower than this after a bounce and it is lost
+
   buffFrames: 420,
   speedBuff: 1.5,
   jumpBuff: 1.28,
   shieldFrames: 900,      // a shield lasts until used, but not forever
   magnetFrames: 600,
 };
+
+/**
+ * Control bindings. Every action the engine reads goes through here, so the
+ * settings screen can rebind any of them without the engine knowing.
+ */
+export const ACTIONS = [
+  // Movement is the left hand.
+  { id: 'left',    label: 'Move left',     group: 'Move',  defaults: ['KeyA'] },
+  { id: 'right',   label: 'Move right',    group: 'Move',  defaults: ['KeyD'] },
+  { id: 'jump',    label: 'Jump',          group: 'Move',  defaults: ['Space', 'KeyW'] },
+  { id: 'slide',   label: 'Slide',         group: 'Move',  defaults: ['KeyS'] },
+  { id: 'dive',    label: 'Dive',          group: 'Move',  defaults: ['KeyE'] },
+  { id: 'exit',    label: 'Leave vehicle', group: 'Move',  defaults: ['KeyQ'] },
+  { id: 'boost',   label: 'Boost',         group: 'Move',  defaults: ['ShiftLeft', 'ShiftRight'] },
+
+  // Throwing is the right hand. Holding an arrow winds the throw up and aims
+  // it; letting go releases the bag. Two arrows together throw on the diagonal.
+  { id: 'aimUp',    label: 'Throw up',     group: 'Throw', defaults: ['ArrowUp'] },
+  { id: 'aimDown',  label: 'Throw down',   group: 'Throw', defaults: ['ArrowDown'] },
+  { id: 'aimLeft',  label: 'Throw left',   group: 'Throw', defaults: ['ArrowLeft'] },
+  { id: 'aimRight', label: 'Throw right',  group: 'Throw', defaults: ['ArrowRight'] },
+
+  { id: 'restart', label: 'Restart level', group: 'System', defaults: ['KeyR'] },
+  { id: 'pause',   label: 'Pause',         group: 'System', defaults: ['Escape', 'KeyP'] },
+];
+
+/** Aim directions, in the order the throw vector is summed. */
+export const AIM_ACTIONS = [
+  { id: 'aimUp',    x: 0,  y: -1 },
+  { id: 'aimDown',  x: 0,  y: 1 },
+  { id: 'aimLeft',  x: -1, y: 0 },
+  { id: 'aimRight', x: 1,  y: 0 },
+];
+
+export const DEFAULT_BINDINGS = Object.fromEntries(
+  ACTIONS.map(a => [a.id, [...a.defaults]]));
+
+/** Merges saved bindings over the defaults, dropping anything unrecognised. */
+export function resolveBindings(saved = {}) {
+  const out = {};
+  for (const action of ACTIONS) {
+    const custom = saved[action.id];
+    out[action.id] = Array.isArray(custom) && custom.length
+      ? [...custom]
+      : [...action.defaults];
+  }
+  return out;
+}
+
+/** Human-readable name for a KeyboardEvent.code. */
+export function keyName(code) {
+  if (!code) return '\u2014';
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return 'Num ' + code.slice(6);
+  return {
+    Space: 'Space', Escape: 'Esc',
+    ArrowUp: '\u2191', ArrowDown: '\u2193', ArrowLeft: '\u2190', ArrowRight: '\u2192',
+    ShiftLeft: 'L Shift', ShiftRight: 'R Shift',
+    ControlLeft: 'L Ctrl', ControlRight: 'R Ctrl',
+    AltLeft: 'L Alt', AltRight: 'R Alt',
+    Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace',
+  }[code] ?? code;
+}
 
 /** Powerup kinds the engine understands, and how they are presented. */
 export const POWERUP_TYPES = [
@@ -101,6 +202,35 @@ export const POWERUP_TYPES = [
 ];
 
 export const POWERUP_BY_ID = Object.fromEntries(POWERUP_TYPES.map(p => [p.id, p]));
+
+/**
+ * Flow: the chain you build by keeping moving. Every distinct move adds to it,
+ * it decays if you stand still, and it pays out as a tip bonus at the end of
+ * the level — so the fastest route and the most stylish one are the same
+ * route. Throwing the bag is worth the most because it is the biggest risk.
+ */
+export const FLOW = {
+  window: 150,            // frames a chain survives without a new move
+  max: 40,                // chain length at which the multiplier caps
+  maxMultiplier: 3,
+  values: {
+    jump: 1,
+    slide: 1,
+    dive: 2,
+    wallKick: 2,
+    airJump: 2,
+    longJump: 3,
+    diveBounce: 3,
+    throw: 2,
+    catch: 3,
+    bagBounce: 6,         // throw it, chase it, catch it mid-air: the big one
+    airDelivery: 10,      // landing the bag on Bert from range
+    boost: 2,
+  },
+  // Repeating the same move immediately is worth less, so mashing one button
+  // does not build a chain.
+  repeatFalloff: 0.4,
+};
 
 export const COLORS = {
   player: '#06C167',
@@ -135,6 +265,71 @@ export const SKINS = [
   { id: 'employee', name: 'Employee of Month', cost: 8000,  color: '#e2e8f0', textColor: '#0f172a' },
   { id: 'amir',     name: 'AMIR',              cost: 25000, color: '#f59e0b', textColor: '#4c1d95' },
 ];
+
+/**
+ * Gear: permanent upgrades bought with tips. Unlike skins these change how the
+ * game plays, which is what gives tips a purpose beyond cosmetics. Each one
+ * resolves into the loadout below and is read by the engine.
+ */
+export const GEAR = [
+  { id: 'second_wind',  name: 'Second Wind',    cost: 1200, icon: '↑',
+    description: 'A second air jump.', effect: { airJumps: 1 } },
+  { id: 'reinforced',   name: 'Reinforced Bag', cost: 900,  icon: '⬓',
+    description: 'The bag survives one more hit before the delivery is blown.',
+    effect: { bagBounces: 1 } },
+  { id: 'grip_gloves',  name: 'Grip Gloves',    cost: 700,  icon: '✋',
+    description: 'Catch the bag from 40% further away.', effect: { catchRadius: 1.4 } },
+  { id: 'quick_hands',  name: 'Quick Hands',    cost: 800,  icon: '◉',
+    description: 'Throws charge twice as fast.', effect: { chargeSpeed: 2 } },
+  { id: 'wide_magnet',  name: 'Wide Magnet',    cost: 1500, icon: '◎',
+    description: 'Magnets reach 60% further and last longer.',
+    effect: { magnetRadius: 1.6, magnetDuration: 1.5 } },
+  { id: 'insulated',    name: 'Insulated Box',  cost: 1800, icon: '◇',
+    description: 'Shields last twice as long.', effect: { shieldDuration: 2 } },
+  { id: 'track_shoes',  name: 'Track Shoes',    cost: 2200, icon: '»',
+    description: '10% faster on foot.', effect: { moveSpeed: 1.1 } },
+  { id: 'spring_heels', name: 'Spring Heels',   cost: 2600, icon: '⇈',
+    description: '8% more jump height.', effect: { jumpForce: 1.08 } },
+  { id: 'crash_pads',   name: 'Crash Pads',     cost: 3000, icon: '↻',
+    description: 'Dives rebound from slower landings.', effect: { diveBounceThreshold: 0.6 } },
+  { id: 'couriers_cut', name: "Courier's Cut",  cost: 4000, icon: '$',
+    description: '20% more tips from every delivery.', effect: { tips: 1.2 } },
+];
+
+export const GEAR_BY_ID = Object.fromEntries(GEAR.map(g => [g.id, g]));
+
+/** Folds a profile's owned gear into a single set of modifiers. */
+export function resolveLoadout(ownedIds = []) {
+  const loadout = {
+    airJumps: PHYSICS.airJumps,
+    bagBounces: PHYSICS.bagBounceLimit,
+    catchRadius: PHYSICS.catchRadius,
+    magnetRadius: PHYSICS.magnetCatchRadius,
+    magnetDuration: PHYSICS.magnetFrames,
+    shieldDuration: PHYSICS.shieldFrames,
+    chargeFrames: PHYSICS.throwChargeFrames,
+    moveSpeed: 1,
+    jumpForce: 1,
+    diveBounceMinSpeed: PHYSICS.diveBounceMinSpeed,
+    tips: 1,
+  };
+  for (const id of ownedIds) {
+    const effect = GEAR_BY_ID[id]?.effect;
+    if (!effect) continue;
+    if (effect.airJumps) loadout.airJumps += effect.airJumps;
+    if (effect.bagBounces) loadout.bagBounces += effect.bagBounces;
+    if (effect.catchRadius) loadout.catchRadius *= effect.catchRadius;
+    if (effect.magnetRadius) loadout.magnetRadius *= effect.magnetRadius;
+    if (effect.magnetDuration) loadout.magnetDuration *= effect.magnetDuration;
+    if (effect.shieldDuration) loadout.shieldDuration *= effect.shieldDuration;
+    if (effect.chargeSpeed) loadout.chargeFrames /= effect.chargeSpeed;
+    if (effect.moveSpeed) loadout.moveSpeed *= effect.moveSpeed;
+    if (effect.jumpForce) loadout.jumpForce *= effect.jumpForce;
+    if (effect.diveBounceThreshold) loadout.diveBounceMinSpeed *= effect.diveBounceThreshold;
+    if (effect.tips) loadout.tips *= effect.tips;
+  }
+  return loadout;
+}
 
 // Every achievement here is reachable. `check` receives the live profile and
 // returns true once earned; it is evaluated after any stat or progress change.
@@ -175,6 +370,14 @@ export const ACHIEVEMENTS = [
   { id: 'shield_1',     title: 'Deflected',      description: 'Survive a hazard with a shield', icon: '◇', check: p => p.stats.shieldsUsed >= 1 },
   { id: 'magnet_1',     title: 'Tractor Beam',   description: 'Reel the bag in with a magnet', icon: '◎', check: p => p.stats.magnetCatches >= 1 },
   { id: 'boost_1',      title: 'Nitro',          description: 'Boost a vehicle',               icon: '≫', check: p => p.stats.boosts >= 1 },
+  { id: 'speedrun_1',   title: 'Full Shift',     description: 'Finish a speedrun of the whole campaign', icon: '\u23F1', check: p => (p.stats.runsCompleted ?? 0) >= 1 },
+  { id: 'gear_1',       title: 'Kitted Out',     description: 'Buy a piece of gear',           icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= 1 },
+  { id: 'gear_5',       title: 'Well Equipped',  description: 'Own 5 pieces of gear',          icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= 5 },
+  { id: 'gear_all',     title: 'Fully Loaded',   description: 'Own every piece of gear',       icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= GEAR.length },
+  { id: 'flow_20',      title: 'In The Zone',    description: 'Reach a flow chain of 20',      icon: '∿', check: p => p.stats.bestFlow >= 20 },
+  { id: 'flow_max',     title: 'Untouchable',    description: 'Max out the flow chain',        icon: '∿', check: p => p.stats.bestFlow >= FLOW.max },
+  { id: 'air_delivery_1', title: 'Special Delivery', description: 'Deliver by throwing the bag to Bert', icon: '\u27B6', check: p => p.stats.airDeliveries >= 1 },
+  { id: 'air_delivery_10', title: 'Air Drop',        description: 'Land 10 thrown deliveries',    icon: '\u27B6', check: p => p.stats.airDeliveries >= 10 },
   { id: 'bounce_bag_1', title: 'Bag Bounce',     description: 'Catch the bag in mid-air for a launch', icon: '↥', check: p => p.stats.bagBounces >= 1 },
   { id: 'bounce_bag_25',title: 'Air Courier',    description: 'Launch off the bag 25 times',   icon: '↥', check: p => p.stats.bagBounces >= 25 },
   { id: 'bounce_bag_100',title: 'Bag Rider',     description: 'Launch off the bag 100 times',  icon: '↥', check: p => p.stats.bagBounces >= 100 },

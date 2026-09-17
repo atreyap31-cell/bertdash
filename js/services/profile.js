@@ -4,7 +4,7 @@
 // the engine bumps stats (jumps, slides, wall slides) many times a second and
 // a synchronous localStorage write per event is enough to cause frame drops.
 
-import { ACHIEVEMENTS } from '../data/config.js';
+import { ACHIEVEMENTS, resolveLoadout, resolveBindings } from '../data/config.js';
 
 const STORAGE_KEY = 'bertdash.profile.v1';
 const LEGACY_KEY = 'bd_offline_v4'; // save file from the old single-page build
@@ -26,6 +26,9 @@ const DEFAULT_STATS = {
   shieldsUsed: 0,
   chargedThrows: 0,
   bagBounces: 0,
+  airDeliveries: 0,
+  runsCompleted: 0,
+  bestFlow: 0,
   magnetCatches: 0,
   levelsCleared: 0,
   customCleared: 0,
@@ -56,10 +59,14 @@ const DEFAULT_PROFILE = {
   unlockedSkins: ['base'],
   equippedSkin: 'base',
   customLevels: [],
+  ownedGear: [],
   unlockedAchievements: [],
+  clearsPerLevel: {},
   bestLevelTimes: {},
+  bestRunMs: null,       // fastest full campaign run
   attemptsPerLevel: {},
-  settings: { sound: true, reducedFlash: false },
+  settings: { sound: true, reducedFlash: false, speedrun: false, showInputs: false },
+  bindings: {},
   stats: { ...DEFAULT_STATS },
 };
 
@@ -91,6 +98,9 @@ class ProfileService {
       bestLevelTimes: { ...(raw.bestLevelTimes ?? {}) },
       attemptsPerLevel: { ...(raw.attemptsPerLevel ?? {}) },
       unlockedSkins: [...new Set(raw.unlockedSkins ?? ['base'])],
+      ownedGear: [...new Set(raw.ownedGear ?? [])],
+      bindings: { ...(raw.bindings ?? {}) },
+      clearsPerLevel: { ...(raw.clearsPerLevel ?? {}) },
       unlockedAchievements: [...new Set(raw.unlockedAchievements ?? [])],
       customLevels: Array.isArray(raw.customLevels) ? raw.customLevels : [],
     };
@@ -179,6 +189,66 @@ class ProfileService {
     return true;
   }
 
+  /** Buys a piece of gear. Gear is permanent — there is nothing to equip. */
+  purchaseGear(id, cost) {
+    const p = this.#profile;
+    if (p.ownedGear.includes(id) || p.tips < cost) return false;
+    p.tips -= cost;
+    p.ownedGear.push(id);
+    this.save();
+    return true;
+  }
+
+  /** The resolved control map the engine should read. */
+  bindings() {
+    return resolveBindings(this.#profile.bindings);
+  }
+
+  setBinding(action, codes) {
+    this.#profile.bindings[action] = [...codes];
+    this.save();
+  }
+
+  resetBindings() {
+    this.#profile.bindings = {};
+    this.save();
+  }
+
+  ownsGear(id) {
+    return this.#profile.ownedGear.includes(id);
+  }
+
+  /** The modifiers the engine should run with, folded from owned gear. */
+  loadout() {
+    return resolveLoadout(this.#profile.ownedGear);
+  }
+
+  /** How many times a level has been finished, for diminishing payouts. */
+  clearCount(levelId) {
+    return this.#profile.clearsPerLevel[String(levelId)] ?? 0;
+  }
+
+  /** Records a completed speedrun, returning whether it is a new record. */
+  recordRun(totalMs) {
+    const previous = this.#profile.bestRunMs;
+    const isRecord = previous == null || totalMs < previous;
+    if (isRecord) this.#profile.bestRunMs = totalMs;
+    this.#profile.stats.runsCompleted = (this.#profile.stats.runsCompleted ?? 0) + 1;
+    this.save();
+    return isRecord;
+  }
+
+  get bestRun() {
+    return this.#profile.bestRunMs;
+  }
+
+  recordFlow(best) {
+    if (best > (this.#profile.stats.bestFlow ?? 0)) {
+      this.#profile.stats.bestFlow = best;
+      this.save();
+    }
+  }
+
   equipSkin(id) {
     if (!this.#profile.unlockedSkins.includes(id)) return;
     this.#profile.equippedSkin = id;
@@ -205,9 +275,11 @@ class ProfileService {
     const key = String(levelId);
     const best = this.#profile.bestLevelTimes[key];
     const isNewBest = best == null || timeMs < best;
+    const firstClear = best == null;
     if (isNewBest) this.#profile.bestLevelTimes[key] = timeMs;
+    this.#profile.clearsPerLevel[key] = (this.#profile.clearsPerLevel[key] ?? 0) + 1;
     this.save();
-    return isNewBest;
+    return { isNewBest, firstClear, clears: this.#profile.clearsPerLevel[key] };
   }
 
   getBest(levelId) {

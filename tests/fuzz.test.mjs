@@ -24,7 +24,9 @@ function rng(seed) {
   };
 }
 
-const KEYS = ['KeyA', 'KeyD', 'Space', 'KeyS', 'KeyE', 'KeyQ', 'ArrowUp', 'ArrowLeft', 'ArrowRight'];
+// Movement is WASD; the arrows aim and throw the bag.
+const KEYS = ['KeyA', 'KeyD', 'Space', 'KeyS', 'KeyE', 'KeyQ', 'ShiftLeft',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
 function overlaps(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x
@@ -61,16 +63,6 @@ function runLevel(levelSource, seed, frames = 600) {
       const key = KEYS[Math.floor(random() * KEYS.length)];
       if (held.has(key)) { held.delete(key); globalThis.dispatchWindow('keyup', { code: key }); }
       else { held.add(key); globalThis.dispatchWindow('keydown', { code: key, repeat: false, preventDefault() {} }); }
-    }
-    // Occasionally fling the bag somewhere.
-    if (frame % 120 === 60) {
-      game.aim = {
-        x: game.player.x + (random() - 0.5) * 600,
-        y: game.player.y + (random() - 0.5) * 400,
-      };
-      canvas.dispatch('pointerdown', {
-        clientX: 400, clientY: 300, preventDefault() {},
-      });
     }
 
     advance(1);
@@ -116,14 +108,14 @@ function runLevel(levelSource, seed, frames = 600) {
   return { problems, outcome };
 }
 
-// 34 levels x 3 seeds x 600 frames is about 61k simulated frames. Pushing much
+// 54 levels x 2 seeds x 600 frames is about 65k simulated frames. Pushing much
 // past this intermittently trips a V8 crash in the Node 24 test runner's child
 // processes (a fatal "unreachable code", not a failure in the game), so the
 // workload is deliberately held here.
 test('no level produces a geometry or numeric glitch under random input', () => {
   const failures = [];
   for (const level of LEVELS) {
-    for (const seed of [1, 7, 12345]) {
+    for (const seed of [1, 7]) {
       const { problems } = runLevel(level, seed);
       if (problems.length) {
         failures.push(`level ${level.id} "${level.title}" seed ${seed}: ${problems[0]}`);

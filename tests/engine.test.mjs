@@ -115,7 +115,9 @@ test('reaching the goal fires onWin exactly once', () => {
   events.win = null;
   advance(120);
   assert.equal(events.win, null, 'onWin must not fire again while standing on the goal');
-  assert.ok(first.timeMs > 0);
+  // The clock only runs once you move, and this run never had to, so zero is
+  // the correct time here.
+  assert.ok(first.timeMs >= 0);
 });
 
 test('a death fires onLose once and reports the first cause', () => {
@@ -247,20 +249,17 @@ test('doors are solid while closed and passable while open', () => {
 // --- food ------------------------------------------------------------------
 
 /**
- * Throws at a world point, mirroring how the canvas maps pointer coords.
- * Press starts the wind-up and release lets go, so a throw needs both.
- * `chargeFrames` holds the button down to build power first.
+ * Throws the bag. Aiming is on the arrow keys: hold one or more to aim and
+ * charge, release to let go. `dirs` is any of 'up' 'down' 'left' 'right';
+ * two together throw on the diagonal.
  */
-function throwAt(game, canvas, worldX, worldY, chargeFrames = 0) {
-  const event = {
-    clientX: worldX - game.camera.x,
-    clientY: worldY - game.camera.y,
-    preventDefault() {},
-  };
-  canvas.dispatch('pointermove', event);
-  canvas.dispatch('pointerdown', event);
-  if (chargeFrames) advance(chargeFrames);
-  canvas.dispatch('pointerup', event);
+function throwDir(dirs, charge = 1) {
+  const map = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+  const codes = [].concat(dirs).map(d => map[d]);
+  codes.forEach(keys.down);
+  advance(Math.max(1, charge));
+  codes.forEach(keys.up);
+  advance(1);                 // the release frame is when the bag leaves
 }
 
 test('throwing releases the bag and hitting a surface loses the run', () => {
@@ -268,7 +267,7 @@ test('throwing releases the bag and hitting a surface loses the run', () => {
   advance(60);
   assert.equal(game.player.hasFood, true);
 
-  throwAt(game, canvas, game.player.x + 300, game.player.y);
+  throwDir('right', 1);
   assert.equal(game.player.hasFood, false, 'throw should release the bag');
   assert.equal(game.food.airborne, true);
 
@@ -280,7 +279,7 @@ test('the bag can be caught back out of the air', () => {
   const { game, canvas, events } = boot();
   advance(60);
   // Throw straight up so it falls back into the catch radius.
-  throwAt(game, canvas, game.player.x + 16, game.player.y - 400);
+  throwDir('up', 1);
   assert.equal(game.player.hasFood, false);
 
   advance(200);
@@ -291,8 +290,10 @@ test('the bag can be caught back out of the air', () => {
 test('the aim preview stops at the first surface it would hit', () => {
   const { game } = boot();
   advance(60);
-  game.aim = { x: game.player.x + 400, y: game.player.y };
+  keys.down('ArrowRight');
+  advance(1);
   const arc = game.predictThrow();
+  keys.up('ArrowRight');
   assert.ok(arc.length > 1, 'should produce a trajectory');
   const last = arc.at(-1);
   assert.ok(last.y <= FLOOR_Y + 40, `preview ran past the floor to y=${last.y}`);

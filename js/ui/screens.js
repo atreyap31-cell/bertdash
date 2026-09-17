@@ -1,7 +1,7 @@
 // Menu, level select, results, store, trophies, settings and the peer hub.
 
 import { el, modal, toast, confirmDialog, formatTime, formatMoney } from './dom.js';
-import { SKINS, ACHIEVEMENTS, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
+import { SKINS, GEAR, ACHIEVEMENTS, ACTIONS, keyName, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
 import { LEVELS, CAMPAIGN_LENGTH } from '../data/levels.js';
 import { profile } from '../services/profile.js';
 import { audio } from '../services/audio.js';
@@ -44,9 +44,14 @@ export function renderMenu(app) {
         el('div.chip', [el('b', `$${formatMoney(p.tips)}`), ' tips']),
         el('div.chip', [el('b', `${cleared}/${CAMPAIGN_LENGTH}`), ' delivered']),
         el('div.chip', [el('b', `${p.unlockedAchievements.length}/${ACHIEVEMENTS.length}`), ' trophies']),
+        p.bestRunMs != null
+          ? el('div.chip.chip--record', [el('b', formatTime(p.bestRunMs)), ' best run'])
+          : null,
       ]),
       el('div.menu__grid', [
-        tile('Start Shift', 'Continue the campaign', () => app.startCampaign(), '.tile--primary'),
+        tile('Start Shift',
+          p.settings.speedrun ? 'Speedrun: level 1 to the end' : 'Continue the campaign',
+          () => app.startCampaign(), '.tile--primary'),
         tile('Campaign', `${CAMPAIGN_LENGTH} levels`, () => app.show('levels')),
         tile('Workshop', `${p.customLevels.length} custom`, () => app.show('workshop')),
         tile('Store', 'Spend your tips', () => openStore()),
@@ -56,12 +61,13 @@ export function renderMenu(app) {
         tile('Settings', 'Sound, data, name', () => openSettings(app)),
       ]),
       el('footer.menu__foot', [
-        el('span', 'WASD / Arrows move · Space jump, again in mid-air for a second jump · '
-          + 'Space on a wall to kick off · S slide, then Space for a long jump · '
-          + 'E dive toward the cursor · Hold click to charge a throw'),
-        el('span.menu__foot-key', 'Throw the bag upward, jump after it and catch it in mid-air '
-          + 'for a launch far higher than any jump — several levels need it.'),
-        el('span', 'Shift boosts a vehicle, Q leaves it · R restarts · Esc pauses'),
+        el('span', 'WASD moves · Space jumps, again in mid-air for a second jump · '
+          + 'Space against a wall kicks off it · S slides, then Space for a long jump · '
+          + 'E dives · Shift boosts a vehicle, Q leaves it · R restarts · Esc pauses'),
+        el('span.menu__foot-key', 'Arrow keys aim and throw the bag — hold to charge, '
+          + 'release to throw, two together for a diagonal. Throw it up, jump after it and '
+          + 'catch it in mid-air for a launch higher than any jump. Dive and you chase '
+          + 'whatever you threw. Land it on Bert and the delivery is done.'),
       ]),
     ]),
   ]);
@@ -184,8 +190,35 @@ export function renderResult(app, result) {
       el('div.result__rows', [
         el('div.result__row', [el('span', 'Time'), el('b', formatTime(result.timeMs))]),
         el('div.result__row', [el('span', 'Par'), el('b', `${result.parTime.toFixed(1)}s`)]),
-        isWin ? el('div.result__row', [el('span', 'Tips earned'), el('b.is-good', `+$${result.reward}`)]) : null,
-        result.isNewBest ? el('div.result__row', [el('span', 'Personal best'), el('b.is-good', 'New record')]) : null,
+        isWin && result.bestFlow ? el('div.result__row', [
+          el('span', 'Flow'),
+          el('b', `${result.bestFlow} ×${result.flowMultiplier.toFixed(2)}`),
+        ]) : null,
+        isWin ? el('div.result__row', [
+          el('span', result.payoutNote ?? 'Tips earned'),
+          el('b.is-good', `+$${result.reward}`),
+        ]) : null,
+        isWin && result.flowBonus > 0 ? el('div.result__row', [
+          el('span', 'of which flow bonus'),
+          el('b.is-good', `+$${result.flowBonus}`),
+        ]) : null,
+        result.isNewBest ? el('div.result__row', [
+          el('span', 'Personal best'),
+          el('b.is-good', result.firstClear ? 'First clear' : 'New record'),
+        ]) : null,
+        result.runSplit ? el('div.result__row.result__row--run', [
+          el('span', result.runSplit.complete
+            ? `Run complete · ${result.runSplit.levels} levels`
+            : `Run total · ${result.runSplit.levels} levels`),
+          el('b', formatTime(result.runSplit.totalMs)),
+        ]) : null,
+        result.runSplit?.complete ? el('div.result__row', [
+          el('span', result.runSplit.isRecord ? 'New run record' : 'Best run'),
+          el('b' + (result.runSplit.isRecord ? '.is-good' : ''),
+            result.runSplit.isRecord
+              ? 'Record!'
+              : formatTime(result.runSplit.previousBest ?? result.runSplit.totalMs)),
+        ]) : null,
       ]),
       el('blockquote.result__quote', `“${quote}”`),
       el('div.result__actions', actions),
@@ -196,46 +229,93 @@ export function renderResult(app, result) {
 // --- store -----------------------------------------------------------------
 
 export function openStore() {
-  let body;
-  const build = () => {
+  let tab = 'gear';
+  const body = el('div');
+
+  const wallet = () => el('div.store__wallet', [
+    el('span.store__wallet-label', 'Tips'),
+    el('span.store__wallet-value', `$${formatMoney(profile.get().tips)}`),
+  ]);
+
+  const tabs = () => el('div.hub__tabs', [
+    ['gear', 'Gear'],
+    ['skins', 'Skins'],
+  ].map(([id, label]) => el(`button.hub__tab${tab === id ? '.is-active' : ''}`, {
+    onclick: () => { tab = id; refresh(); },
+  }, label)));
+
+  const gearGrid = () => {
     const p = profile.get();
-    return el('div.store', [
-      el('div.store__wallet', [
-        el('span.store__wallet-label', 'Tips'),
-        el('span.store__wallet-value', `$${formatMoney(p.tips)}`),
-      ]),
-      el('div.store__grid', SKINS.map(skin => {
-        const owned = p.unlockedSkins.includes(skin.id);
-        const equipped = p.equippedSkin === skin.id;
-        const affordable = p.tips >= skin.cost;
-        return el(`div.skin${equipped ? '.is-equipped' : ''}`, [
-          equipped ? el('span.skin__flag', 'Equipped') : null,
-          skinSwatch(skin),
-          el('h3.skin__name', skin.name),
-          owned ? null : el('p.skin__price', `$${skin.cost.toLocaleString()}`),
-          owned
-            ? el('button.btn.btn--sm' + (equipped ? '.btn--ghost' : '.btn--primary'), {
-                disabled: equipped,
-                onclick: () => { profile.equipSkin(skin.id); audio.click(); refresh(); },
-              }, equipped ? 'Active' : 'Equip')
-            : el('button.btn.btn--sm' + (affordable ? '.btn--primary' : '.btn--ghost'), {
-                disabled: !affordable,
-                title: affordable ? '' : `You need $${(skin.cost - p.tips).toLocaleString()} more`,
-                onclick: () => {
-                  if (profile.purchaseSkin(skin.id, skin.cost)) {
-                    audio.pickup();
-                    toast(`Unlocked ${skin.name}`, { icon: '◈', tone: 'good' });
-                    refresh();
-                  }
-                },
-              }, affordable ? 'Buy' : 'Locked'),
-        ]);
-      })),
-    ]);
+    return el('div.store__grid', GEAR.map(item => {
+      const owned = p.ownedGear.includes(item.id);
+      const affordable = p.tips >= item.cost;
+      return el(`div.gear${owned ? '.is-owned' : ''}`, [
+        el('div.gear__icon', item.icon),
+        el('div.gear__body', [
+          el('h3.gear__name', item.name),
+          el('p.gear__desc', item.description),
+        ]),
+        owned
+          ? el('span.gear__owned', 'Owned')
+          : el(`button.btn.btn--sm${affordable ? '.btn--primary' : '.btn--ghost'}`, {
+              disabled: !affordable,
+              title: affordable ? '' : `You need $${(item.cost - p.tips).toLocaleString()} more`,
+              onclick: () => {
+                if (profile.purchaseGear(item.id, item.cost)) {
+                  audio.pickup();
+                  toast(`Bought ${item.name}`, { icon: item.icon, tone: 'good' });
+                  refresh();
+                }
+              },
+            }, affordable ? `$${item.cost.toLocaleString()}` : `$${item.cost.toLocaleString()}`),
+      ]);
+    }));
   };
 
-  const refresh = () => body.replaceChildren(build());
-  body = el('div');
+  const skinGrid = () => {
+    const p = profile.get();
+    return el('div.store__grid', SKINS.map(skin => {
+      const owned = p.unlockedSkins.includes(skin.id);
+      const equipped = p.equippedSkin === skin.id;
+      const affordable = p.tips >= skin.cost;
+      return el(`div.skin${equipped ? '.is-equipped' : ''}`, [
+        equipped ? el('span.skin__flag', 'Equipped') : null,
+        skinSwatch(skin),
+        el('h3.skin__name', skin.name),
+        owned ? null : el('p.skin__price', `$${skin.cost.toLocaleString()}`),
+        owned
+          ? el('button.btn.btn--sm' + (equipped ? '.btn--ghost' : '.btn--primary'), {
+              disabled: equipped,
+              onclick: () => { profile.equipSkin(skin.id); audio.click(); refresh(); },
+            }, equipped ? 'Active' : 'Equip')
+          : el('button.btn.btn--sm' + (affordable ? '.btn--primary' : '.btn--ghost'), {
+              disabled: !affordable,
+              title: affordable ? '' : `You need $${(skin.cost - p.tips).toLocaleString()} more`,
+              onclick: () => {
+                if (profile.purchaseSkin(skin.id, skin.cost)) {
+                  audio.pickup();
+                  toast(`Unlocked ${skin.name}`, { icon: '◈', tone: 'good' });
+                  refresh();
+                }
+              },
+            }, affordable ? 'Buy' : 'Locked'),
+      ]);
+    }));
+  };
+
+  const refresh = () => {
+    body.replaceChildren(el('div.store', [
+      wallet(),
+      tabs(),
+      tab === 'gear'
+        ? el('div', [
+            el('p.hub__note', 'Gear is permanent and changes how you play. '
+              + 'Skins are cosmetic.'),
+            gearGrid(),
+          ])
+        : skinGrid(),
+    ]));
+  };
   refresh();
 
   modal({ title: 'Delivery <em>Store</em>', subtitle: 'Spend those tips', body, wide: true });
@@ -273,6 +353,61 @@ export function openTrophies() {
 
 export function openSettings(app) {
   const p = profile.get();
+  const keyList = el('div.keybinds');
+
+  /**
+   * One row per action. Clicking a slot listens for the next key press and
+   * binds it, so rebinding never needs a key name to be typed.
+   */
+  function bindingRows() {
+    refreshBindings();
+    return keyList;
+  }
+
+  function refreshBindings() {
+    const bindings = profile.bindings();
+    keyList.replaceChildren(...ACTIONS.map(action => {
+      const slots = bindings[action.id];
+      return el('div.keybind', [
+        el('span.keybind__label', action.label),
+        el('div.keybind__slots', slots.slice(0, 2).map((code, index) =>
+          el('button.keybind__slot', {
+            onclick: event => listenFor(action, index, event.currentTarget),
+          }, keyName(code)))),
+      ]);
+    }));
+  }
+
+  /** Captures the next key press and assigns it to this slot. */
+  function listenFor(action, index, button) {
+    if (button.classList.contains('is-listening')) return;
+    button.classList.add('is-listening');
+    button.textContent = 'Press a key';
+
+    const onKey = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      cleanup();
+      if (event.code === 'Escape') { refreshBindings(); return; }
+
+      const bindings = profile.bindings();
+      const codes = [...bindings[action.id]];
+      codes[index] = event.code;
+      // The same key cannot drive two actions at once.
+      for (const other of ACTIONS) {
+        if (other.id === action.id) continue;
+        const cleaned = bindings[other.id].filter(code => code !== event.code);
+        if (cleaned.length !== bindings[other.id].length) {
+          profile.setBinding(other.id, cleaned.length ? cleaned : other.defaults);
+        }
+      }
+      profile.setBinding(action.id, codes);
+      refreshBindings();
+    };
+
+    const cleanup = () => removeEventListener('keydown', onKey, true);
+    addEventListener('keydown', onKey, true);
+  }
 
   const nameInput = el('input.input', {
     value: p.username,
@@ -298,6 +433,30 @@ export function openSettings(app) {
     el('label.setting', [
       el('input', {
         type: 'checkbox',
+        checked: p.settings.showInputs === true,
+        onchange: event => profile.setSetting('showInputs', event.target.checked),
+      }),
+      el('div', [
+        el('span.setting__label', 'Show inputs on screen'),
+        el('span.setting__hint', 'An overlay of the keys you are pressing, '
+          + 'read straight from what the engine registers.'),
+      ]),
+    ]),
+    el('label.setting', [
+      el('input', {
+        type: 'checkbox',
+        checked: p.settings.speedrun === true,
+        onchange: event => profile.setSetting('speedrun', event.target.checked),
+      }),
+      el('div', [
+        el('span.setting__label', 'Speedrun mode'),
+        el('span.setting__hint', 'Start Shift runs the whole campaign against one clock. '
+          + 'A death, a restart or leaving the campaign ends the run.'),
+      ]),
+    ]),
+    el('label.setting', [
+      el('input', {
+        type: 'checkbox',
         checked: p.settings.reducedFlash === true,
         onchange: event => profile.setSetting('reducedFlash', event.target.checked),
       }),
@@ -305,6 +464,15 @@ export function openSettings(app) {
         el('span.setting__label', 'Reduced flashing'),
         el('span.setting__hint', 'Damps screen shake, glow and particles'),
       ]),
+    ]),
+    el('div.settings__keys', [
+      el('h3', 'Controls'),
+      el('p.setting__hint', 'Click a key to rebind it, then press the key you want. '
+        + 'Esc cancels.'),
+      bindingRows(),
+      el('button.btn.btn--sm.btn--ghost', {
+        onclick: () => { profile.resetBindings(); refreshBindings(); toast('Controls reset'); },
+      }, 'Reset to defaults'),
     ]),
     el('div.settings__danger', [
       el('h3', 'Danger zone'),

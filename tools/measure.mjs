@@ -123,8 +123,10 @@ results.diveLaunch = arc((game, sample) => {
   down('KeyE'); step(sample, 1); up('KeyE');
 });
 
-// Bag bounce: throw the bag up, jump after it, catch it mid-air for a launch.
-{
+// Bag bounce: throw the bag up, jump when it is on its way back down and
+// within reach, and catch it. Fixed frame counts do not survive tuning
+// changes, so the timing is found rather than hardcoded.
+function bagBounceRun({ useAirJump = false } = {}) {
   const game = boot();
   const canvas = game.canvas;
   const groundY = game.player.y;
@@ -135,88 +137,72 @@ results.diveLaunch = arc((game, sample) => {
     canvas.dispatch('pointerup', ev);
   };
 
-  down('KeyD'); advance(40);
-  // Lob the bag up and slightly ahead.
-  throwAt(game.player.x + 40, game.player.y - 500);   // toss it straight up
-  advance(12);
-  down('Space'); advance(16); up('Space');           // jump into it
+  down('KeyD');
+  advance(60);                                  // up to running speed
+  const launchX = game.player.x;
+  throwAt(game.player.x + 40, game.player.y - 500);
+
+  // Wait for the bag to come back down to within jumping distance.
+  for (let i = 0; i < 200; i++) {
+    const f = game.food;
+    const above = (game.player.y + game.player.height / 2) - (f.y + f.size / 2);
+    if (f.vy > 0 && above > 0 && above < 190) break;
+    advance(1);
+  }
+
+  down('Space');
+  advance(16);
+  up('Space');
 
   let peak = 0;
-  let bounced = false;
-  const launchX = game.player.x;
   let reach = 0;
+  let usedAir = false;
   for (let i = 0; i < 260; i++) {
     advance(1);
     peak = Math.max(peak, groundY - game.player.y);
     reach = Math.max(reach, Math.abs(game.player.x - launchX));
-    if (game.player.hasFood && !bounced && i > 2) bounced = true;
-    if (bounced && game.player.grounded) break;
-  }
-  release();
-  game.destroy();
-  results.bagBounce = { height: Math.round(peak), distance: Math.round(reach) };
-}
-
-// Bag bounce followed by an air jump: the highest the player can get.
-{
-  const game = boot();
-  const canvas = game.canvas;
-  const groundY = game.player.y;
-  const throwAt = (wx, wy) => {
-    const ev = { clientX: wx - game.camera.x, clientY: wy - game.camera.y, preventDefault() {} };
-    canvas.dispatch('pointermove', ev);
-    canvas.dispatch('pointerdown', ev);
-    canvas.dispatch('pointerup', ev);
-  };
-
-  down('KeyD'); advance(40);
-  throwAt(game.player.x + 40, game.player.y - 500);
-  advance(12);
-  down('Space'); advance(16); up('Space');
-
-  let peak = 0;
-  let usedAir = false;
-  const launchX = game.player.x;
-  let reach = 0;
-  for (let i = 0; i < 300; i++) {
-    advance(1);
-    peak = Math.max(peak, groundY - game.player.y);
-    reach = Math.max(reach, Math.abs(game.player.x - launchX));
-    // Spend the refunded air jump once the bounce has fired and we're falling.
-    if (!usedAir && game.player.hasFood && game.player.vy > 0 && i > 30) {
+    if (useAirJump && !usedAir && game.player.hasFood && game.player.vy > 0) {
       down('Space'); advance(1); up('Space');
       usedAir = true;
     }
-    if (usedAir && game.player.grounded) break;
+    if (game.player.grounded && i > 30) break;
   }
   release();
+  const caught = game.player.hasFood;
   game.destroy();
-  results.bagBouncePlusAir = { height: Math.round(peak), distance: Math.round(reach) };
+  return { height: Math.round(peak), distance: Math.round(reach), caught };
 }
+
+results.bagBounce = bagBounceRun();
+results.bagBouncePlusAir = bagBounceRun({ useAirJump: true });
 
 // Wall climb: how far up a shaft repeated kicks carry you.
 {
   const shaft = level({
     platforms: [
       { x: 0, y: FLOOR_Y, width: WIDTH, height: 300, type: 'static' },
-      { x: 700, y: -200, width: 60, height: 800, type: 'static' },
+      { x: 700, y: -400, width: 60, height: 1000, type: 'static' },
     ],
     startPos: { x: 560, y: FLOOR_Y - 48 },
   });
   const game = boot(shaft);
   const y0 = game.player.y;
   let peak = 0;
+
   down('KeyD');
-  down('Space'); advance(14); up('Space');   // jump into the wall first
-  for (let i = 0; i < 600; i++) {
+  advance(30);                       // run into the wall
+  down('Space'); advance(14); up('Space');
+
+  for (let i = 0; i < 700; i++) {
     advance(1);
     peak = Math.max(peak, y0 - game.player.y);
-    // Kick the moment the cling engages, then keep pressing into the wall.
+    // Kick the instant the cling engages, then press back into the wall.
     if (game.player.wallSliding) {
       down('Space'); advance(1); up('Space');
-      advance(6);
+      advance(8);
       down('KeyD');
     }
+    if (game.player.grounded && i > 60) break;   // fell back to the floor
   }
   release();
   game.destroy();

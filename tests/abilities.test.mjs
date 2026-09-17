@@ -221,7 +221,6 @@ test('dive works from the ground, not just mid-air', () => {
   advance(60);
   assert.equal(game.player.grounded, true);
 
-  game.aim = { x: game.player.x + 400, y: game.player.y };
   tap('KeyE');
   assert.equal(game.player.diving, true, 'should dive from standing');
   assert.ok(Math.abs(game.player.vx) > PHYSICS.moveSpeed, 'and carry real speed');
@@ -229,17 +228,53 @@ test('dive works from the ground, not just mid-air', () => {
 
 test('a fast dive into the ground bounces instead of stopping dead', () => {
   const { game, events } = boot();
-  advance(30);                       // airborne
-  game.aim = { x: game.player.x + 120, y: game.player.y + 400 }; // dive down-forward
+  advance(40);                       // settle on the floor
+  keys.down('KeyD');
+  advance(30);
+  jump(16);                          // get height
+  advance(10);
+
+  // Dash forward off the top of the jump, still holding the bag, so the dive
+  // is a flat one and gravity brings it down hard onto the floor.
   tap('KeyE');
+  assert.equal(game.player.diving, true, 'the dive should have started');
 
   let bounced = false;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     advance(1);
     if (game.player.vy < -5 && !game.player.grounded) { bounced = true; break; }
   }
+  keys.up('KeyD');
+
   assert.ok(bounced, 'the dive should have rebounded off the floor');
   assert.ok((finalStats(game, events).get('diveBounces') ?? 0) >= 1, 'and been counted');
+});
+
+test('diving chases a thrown bag, so the throw chooses the direction', () => {
+  const { game, canvas } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(30);
+  jump(16);
+  advance(8);
+
+  // Throw down and forward, then dive: the dive should head at the bag.
+  throwDir(['down', 'right'], 1);
+  advance(2);
+  const bagX = game.food.x;
+  const bagY = game.food.y;
+
+  tap('KeyE');
+  keys.up('KeyD');
+
+  assert.equal(game.player.diving, true, 'the dive should have started');
+  const towardsBagX = bagX - game.player.x;
+  const towardsBagY = bagY - game.player.y;
+  assert.ok(Math.sign(game.player.vx) === Math.sign(towardsBagX) || towardsBagX === 0,
+    'the dive should travel towards the bag horizontally');
+  assert.ok(game.player.vy > 0 && towardsBagY > 0,
+    'and downwards, because that is where the bag was thrown');
+  game.destroy();
 });
 
 // --- charged throw ---------------------------------------------------------
@@ -247,19 +282,17 @@ test('a fast dive into the ground bounces instead of stopping dead', () => {
 test('holding the throw charges it and sends the bag further', () => {
   const short = boot();
   advance(40);
-  short.canvas.dispatch('pointermove', { clientX: 400, clientY: 200, preventDefault() {} });
-  short.canvas.dispatch('pointerdown', { clientX: 400, clientY: 200, preventDefault() {} });
-  short.canvas.dispatch('pointerup', { clientX: 400, clientY: 200, preventDefault() {} });
+  throwDir('right', 1);
   const quickSpeed = Math.hypot(short.game.food.vx, short.game.food.vy);
   short.game.destroy();
 
   const long = boot();
   advance(40);
-  long.canvas.dispatch('pointermove', { clientX: 400, clientY: 200, preventDefault() {} });
-  long.canvas.dispatch('pointerdown', { clientX: 400, clientY: 200, preventDefault() {} });
+  keys.down('ArrowRight');
   advance(PHYSICS.throwChargeFrames + 5);       // wind all the way up
   assert.equal(long.game.chargeRatio(), 1, 'charge should reach full');
-  long.canvas.dispatch('pointerup', { clientX: 400, clientY: 200, preventDefault() {} });
+  keys.up('ArrowRight');
+  advance(1);
 
   const chargedSpeed = Math.hypot(long.game.food.vx, long.game.food.vy);
   assert.ok(chargedSpeed > quickSpeed * 1.4,
@@ -270,9 +303,7 @@ test('holding the throw charges it and sends the bag further', () => {
 test('the charge resets after the throw', () => {
   const { game, canvas } = boot();
   advance(40);
-  canvas.dispatch('pointerdown', { clientX: 400, clientY: 200, preventDefault() {} });
-  advance(20);
-  canvas.dispatch('pointerup', { clientX: 400, clientY: 200, preventDefault() {} });
+  throwDir('right', 20);
   assert.equal(game.chargeRatio(), 0);
   assert.equal(game.charging, false);
 });
@@ -307,10 +338,7 @@ test('a shield does not save you from dropping the bag', () => {
   advance(40);
   assert.ok(game.player.buffs.shield > 0);
 
-  const event = { clientX: 700, clientY: 100, preventDefault() {} };
-  canvas.dispatch('pointermove', event);
-  canvas.dispatch('pointerdown', event);
-  canvas.dispatch('pointerup', event);
+  throwDir('right', 1);
   for (let i = 0; i < 300 && !events.lose; i++) advance(1);
 
   assert.equal(events.lose, 'DROPPED', 'losing the bag is not survivable');
@@ -324,11 +352,8 @@ test('a magnet reels a loose bag back in', () => {
   advance(40);
   assert.ok(game.player.buffs.magnet > 0, 'magnet should be picked up');
 
-  // Lob it up and slightly away — outside the normal catch radius.
-  const event = { clientX: 300, clientY: 120, preventDefault() {} };
-  canvas.dispatch('pointermove', event);
-  canvas.dispatch('pointerdown', event);
-  canvas.dispatch('pointerup', event);
+  // Lob it up and away — outside the normal catch radius.
+  throwDir(['up', 'right'], 1);
   assert.equal(game.player.hasFood, false);
 
   let pulled = false;
@@ -379,16 +404,44 @@ test('boost is one-shot until it recharges', () => {
 
 // --- bag bounce ------------------------------------------------------------
 
-/** Throws the bag at a world point, mirroring the canvas pointer mapping. */
-function throwAt(game, canvas, worldX, worldY) {
-  const event = {
-    clientX: worldX - game.camera.x,
-    clientY: worldY - game.camera.y,
-    preventDefault() {},
-  };
-  canvas.dispatch('pointermove', event);
-  canvas.dispatch('pointerdown', event);
-  canvas.dispatch('pointerup', event);
+/**
+ * Throws the bag straight up, then jumps when it is on its way back down and
+ * within reach — which is how a player actually times a bag bounce. Fixed
+ * frame counts do not survive the throw inheriting the player's momentum.
+ */
+function bagBounce(game, canvas, { spendAirJump = false } = {}) {
+  throwDir('up', 1);
+
+  for (let i = 0; i < 200; i++) {
+    const f = game.food;
+    const p = game.player;
+    const above = (p.y + p.height / 2) - (f.y + f.size / 2);
+    // Descending, and close enough overhead that a jump will meet it.
+    if (f.vy > 0 && above > 0 && above < 190) break;
+    advance(1);
+  }
+
+  keys.down('Space');
+  advance(2);
+  if (spendAirJump) game.player.airJumps = 0;
+  advance(14);
+  keys.up('Space');
+
+  for (let i = 0; i < 90 && !game.player.hasFood; i++) advance(1);
+}
+
+/**
+ * Throws the bag. Aiming is on the arrow keys: hold one or more to aim and
+ * charge, release to let go. `dirs` is any of 'up' 'down' 'left' 'right';
+ * two together throw on the diagonal.
+ */
+function throwDir(dirs, charge = 1) {
+  const map = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+  const codes = [].concat(dirs).map(d => map[d]);
+  codes.forEach(keys.down);
+  advance(Math.max(1, charge));
+  codes.forEach(keys.up);
+  advance(1);                 // the release frame is when the bag leaves
 }
 
 test('catching the bag in mid-air launches you far above jump height', () => {
@@ -408,11 +461,9 @@ test('catching the bag in mid-air launches you far above jump height', () => {
   advance(40);
   keys.down('KeyD');
   advance(30);
-  throwAt(game, canvas, game.player.x + 40, game.player.y - 500);
-  advance(12);
-  jump(16);
+  bagBounce(game, canvas);
 
-  let peak = 0;
+  let peak = groundY - game.player.y;
   for (let i = 0; i < 120; i++) { advance(1); peak = Math.max(peak, groundY - game.player.y); }
   keys.up('KeyD');
 
@@ -427,17 +478,8 @@ test('the bag bounce refunds the air jump', () => {
   advance(40);
   keys.down('KeyD');
   advance(30);
-  throwAt(game, canvas, game.player.x + 40, game.player.y - 500);
-  advance(12);
-
-  // Spend the air jump before the catch can happen, so the refund is visible.
-  keys.down('Space');
-  advance(2);
-  game.player.airJumps = 0;
-  advance(14);
-  keys.up('Space');
-
-  for (let i = 0; i < 60 && !game.player.hasFood; i++) advance(1);
+  // Spend the air jump on the way up, so the refund on the catch is visible.
+  bagBounce(game, canvas, { spendAirJump: true });
   keys.up('KeyD');
 
   assert.equal(game.player.hasFood, true, 'the bag should have been caught');
@@ -449,7 +491,7 @@ test('catching the bag on the ground does not launch you', () => {
   const { game, canvas } = boot();
   advance(40);
   // Lob it almost straight up from standing and wait on the ground for it.
-  throwAt(game, canvas, game.player.x + 16, game.player.y - 500);
+  throwDir('up', 1);
 
   let launched = false;
   for (let i = 0; i < 200; i++) {
@@ -468,10 +510,278 @@ test('the bag bounce is counted', () => {
   advance(40);
   keys.down('KeyD');
   advance(30);
-  throwAt(game, canvas, game.player.x + 40, game.player.y - 500);
-  advance(12);
-  jump(16);
-  for (let i = 0; i < 60 && !game.player.hasFood; i++) advance(1);
+  bagBounce(game, canvas);
   keys.up('KeyD');
   assert.ok((finalStats(game, events).get('bagBounces') ?? 0) >= 1, 'the bounce should be recorded');
+});
+
+// --- the clock and the flow chain ------------------------------------------
+
+test('the clock does not start until you move', () => {
+  const { game } = boot();
+  advance(120);                        // two seconds of standing still
+  assert.equal(game.started, false, 'the run should not have started');
+  assert.equal(game.elapsed, 0, 'no time should be on the clock');
+
+  keys.down('KeyD');
+  advance(30);
+  keys.up('KeyD');
+  assert.equal(game.started, true, 'moving should start the run');
+  assert.ok(game.elapsed > 0, 'and the clock should now be running');
+});
+
+test('jumping also starts the clock', () => {
+  const { game } = boot();
+  advance(60);
+  assert.equal(game.elapsed, 0);
+  tap('Space');
+  advance(5);
+  assert.ok(game.elapsed > 0, 'a jump counts as starting the run');
+});
+
+test('flow builds as you chain moves and lapses when you stop', () => {
+  const { game } = boot();
+  advance(40);
+
+  keys.down('KeyD');
+  jump(12);
+  advance(6);
+  tap('Space');                        // air jump
+  advance(20);
+  keys.up('KeyD');
+
+  assert.ok(game.flow > 0, 'chaining moves should build flow');
+  const peak = game.flow;
+  assert.ok(game.flowMultiplier() > 1, 'flow should raise the payout multiplier');
+
+  advance(200);                        // stand around until the chain lapses
+  assert.equal(game.flow, 0, 'flow should decay to nothing');
+  assert.equal(game.bestFlow, peak, 'but the best held is remembered for the payout');
+});
+
+test('mashing one move does not build flow as fast as varying them', () => {
+  const same = boot();
+  advance(40);
+  for (let i = 0; i < 4; i++) { tap('Space'); advance(3); }   // repeated jumps
+  const sameFlow = same.game.flow;
+  same.game.destroy();
+
+  const varied = boot();
+  advance(40);
+  keys.down('KeyD');
+  jump(12);
+  advance(4);
+  tap('Space');                        // air jump
+  advance(4);
+  tap('KeyE');                         // dive
+  keys.up('KeyD');
+  const variedFlow = varied.game.flow;
+  varied.game.destroy();
+
+  assert.ok(variedFlow > sameFlow,
+    `varied moves (${variedFlow}) should out-earn repeats (${sameFlow})`);
+});
+
+// --- a thrown bag is recoverable -------------------------------------------
+
+test('a thrown bag survives a couple of hits before it is lost', () => {
+  const { game, canvas, events } = boot();
+  advance(40);
+  throwDir(['down', 'right'], 1);   // straight into the floor
+
+  let bounced = false;
+  for (let i = 0; i < 200; i++) {
+    advance(1);
+    if (game.food.bouncesLeft < PHYSICS.bagBounceLimit) bounced = true;
+    if (events.lose) break;
+  }
+  assert.ok(bounced, 'the bag should have bounced rather than dying on contact');
+  game.destroy();
+});
+
+test('a bag that keeps hitting things is eventually lost', () => {
+  const { game, canvas, events } = boot();
+  advance(40);
+  throwDir(['down', 'right'], 1);
+  for (let i = 0; i < 400 && !events.lose; i++) advance(1);
+  assert.equal(events.lose, 'DROPPED', 'it cannot bounce forever');
+});
+
+// --- gear ------------------------------------------------------------------
+
+test('gear changes what the player can do', () => {
+  const canvas = makeCanvas();
+  resetClock();
+  const game = new Game(canvas, fixture(), {
+    skin: { color: '#06c167', textColor: '#fff' },
+    loadout: { airJumps: 3, catchRadius: 120, bagBounces: 5 },
+    onWin: () => {}, onLose: () => {}, onStats: () => {},
+  });
+  game.start();
+  advance(40);
+
+  assert.equal(game.player.airJumps, 3, 'extra air jumps should be granted');
+  assert.equal(game.food.bouncesLeft, 5, 'a reinforced bag should take more hits');
+
+  // All three air jumps should be spendable.
+  jump(12);
+  for (let i = 0; i < 3; i++) { advance(4); tap('Space'); }
+  assert.equal(game.player.airJumps, 0, 'and all of them usable');
+  game.destroy();
+});
+
+// --- throwing the bag to Bert ----------------------------------------------
+
+/** Bert on a shelf across a gap far too wide to jump with the bag in hand. */
+const THROW_LEVEL = fixture({
+  width: 4000, height: 900,
+  goalPos: { x: 2300, y: 430 },
+  platforms: [
+    { x: 0, y: FLOOR_Y, width: 1500, height: 400, type: 'static' },
+    { x: 2150, y: 470, width: 500, height: 430, type: 'static' },
+  ],
+});
+
+/** Runs up, settles, then lofts a fully charged throw at Bert. */
+function longThrowAtBert(game, canvas) {
+  keys.down('KeyD');
+  while (game.player.x < 1280) advance(1);
+  keys.up('KeyD');
+  // Let the run bleed off first: charging takes ~40 frames, and still moving
+  // would walk the player off the edge before the bag is released.
+  while (Math.abs(game.player.vx) > 0.2) advance(1);
+
+  // Charged and lofted: up+right throws on the diagonal.
+  throwDir(['up', 'right'], PHYSICS.throwChargeFrames + 2);
+}
+
+test('a thrown bag that reaches Bert completes the delivery', () => {
+  const { game, canvas, events } = boot(THROW_LEVEL);
+  advance(40);
+  longThrowAtBert(game, canvas);
+  for (let i = 0; i < 300 && !events.win && !events.lose; i++) advance(1);
+
+  assert.ok(events.win, 'the throw should have delivered');
+  assert.equal(events.win.byThrow, true, 'and be recorded as a thrown delivery');
+  assert.equal(events.win.clutch, true, 'a thrown delivery always counts as clutch');
+  game.destroy();
+});
+
+test('a thrown delivery fires onWin exactly once', () => {
+  const { game, canvas, events } = boot(THROW_LEVEL);
+  advance(40);
+  longThrowAtBert(game, canvas);
+  for (let i = 0; i < 300 && !events.win; i++) advance(1);
+  assert.ok(events.win, 'the throw should have delivered');
+
+  events.win = null;
+  advance(120);
+  assert.equal(events.win, null, 'it must not fire again');
+  game.destroy();
+});
+
+test('a thrown delivery is worth the most flow in the game', () => {
+  const { game, canvas, events } = boot(THROW_LEVEL);
+  advance(40);
+  longThrowAtBert(game, canvas);
+  for (let i = 0; i < 300 && !events.win; i++) advance(1);
+
+  assert.ok(events.win.bestFlow >= 10, 'landing one should pay out a large chain');
+  assert.ok((finalStats(game, events).get('airDeliveries') ?? 0) >= 1, 'and be counted');
+});
+
+test('momentum carries into the throw', () => {
+  // Standing throw.
+  const still = boot();
+  advance(40);
+  throwDir('right', 1);
+  const stillSpeed = Math.hypot(still.game.food.vx, still.game.food.vy);
+  still.game.destroy();
+
+  // Same throw at a full sprint.
+  const running = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(60);
+  throwDir('right', 1);
+  const runningSpeed = Math.hypot(running.game.food.vx, running.game.food.vy);
+  keys.up('KeyD');
+  running.game.destroy();
+
+  assert.ok(runningSpeed > stillSpeed * 1.3,
+    `a running throw (${runningSpeed.toFixed(1)}) should beat a standing one (${stillSpeed.toFixed(1)})`);
+});
+
+test('vertical momentum carries too', () => {
+  const ground = boot();
+  advance(40);
+  throwDir(['up', 'right'], 1);
+  const groundVy = ground.game.food.vy;
+  ground.game.destroy();
+
+  // Throwing while still rising out of a jump should send it higher.
+  const rising = boot();
+  advance(40);
+  keys.down('Space');
+  advance(4);
+  throwDir(['up', 'right'], 1);
+  const risingVy = rising.game.food.vy;
+  keys.up('Space');
+  rising.game.destroy();
+
+  assert.ok(risingVy < groundVy,
+    `throwing while rising (${risingVy.toFixed(1)}) should launch the bag harder than from standing (${groundVy.toFixed(1)})`);
+});
+
+test('the aim preview matches the throw it predicts', () => {
+  const { game, canvas } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(40);
+
+  keys.down('ArrowUp');
+  keys.down('ArrowRight');
+  advance(1);
+  const arc = game.predictThrow();
+  assert.ok(arc.length > 2, 'there should be a trajectory to compare against');
+  const predicted = arc[0];
+
+  keys.up('ArrowUp');
+  keys.up('ArrowRight');
+  advance(1);
+  keys.up('KeyD');
+
+  const actual = { x: game.food.x + game.food.size / 2, y: game.food.y + game.food.size / 2 };
+  assert.ok(Math.hypot(actual.x - predicted.x, actual.y - predicted.y) < 30,
+    `preview (${predicted.x.toFixed(0)},${predicted.y.toFixed(0)}) should match the real throw `
+    + `(${actual.x.toFixed(0)},${actual.y.toFixed(0)})`);
+});
+
+// --- ground feel -----------------------------------------------------------
+
+test('landing does not leave you skating', () => {
+  const { game } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(50);                         // up to running speed
+  keys.up('KeyD');
+
+  // Count the frames spent drifting after the input stops.
+  let frames = 0;
+  while (Math.abs(game.player.vx) > 0 && frames < 120) { advance(1); frames++; }
+
+  assert.equal(game.player.vx, 0, 'the player should come to a complete stop');
+  assert.ok(frames <= 1, `stopping took ${frames} frames; there should be no slide at all`);
+});
+
+test('a level can still ask for ice', () => {
+  const { game } = boot(fixture({ physics: { friction: 0.985 } }));
+  advance(40);
+  keys.down('KeyD');
+  advance(50);
+  keys.up('KeyD');
+
+  advance(10);
+  assert.ok(Math.abs(game.player.vx) > 3,
+    'on ice the player should still be sliding well after the input stops');
 });

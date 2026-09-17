@@ -108,7 +108,7 @@ export class Editor {
     this.food = { ...(source.foodPos ?? { x: 180, y: 400 }) };
     this.physics = {
       gravityScale: 1, moveSpeedScale: 1, jumpForceScale: 1,
-      windX: 0, wallSlideEnabled: true,
+      windX: 0, friction: 0, wallSlideEnabled: true,
       ...(source.physics ?? {}),
     };
 
@@ -242,6 +242,8 @@ export class Editor {
             this.#physicsSlider('Run speed', 'moveSpeedScale', 0.5, 2, 0.1),
             this.#physicsSlider('Jump', 'jumpForceScale', 0.6, 1.8, 0.1),
             this.#physicsSlider('Wind', 'windX', -1.5, 1.5, 0.1),
+            // 0 is full grip (stop dead); 0.99 is an ice rink.
+            this.#physicsSlider('Slipperiness', 'friction', 0, 0.99, 0.01),
             el('label.setting', [
               el('input', {
                 type: 'checkbox', checked: this.physics.wallSlideEnabled,
@@ -307,7 +309,7 @@ export class Editor {
       ctl.input.value = this[key];
       ctl.out.textContent = String(this[key]);
     }
-    for (const key of ['gravityScale', 'moveSpeedScale', 'jumpForceScale', 'windX']) {
+    for (const key of ['gravityScale', 'moveSpeedScale', 'jumpForceScale', 'windX', 'friction']) {
       const ctl = this[`ctl_phys_${key}`];
       if (!ctl) continue;
       ctl.input.value = this.physics[key];

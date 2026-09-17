@@ -7,7 +7,7 @@ import { installGlobals } from './harness.mjs';
 installGlobals();
 
 const { profile } = await import('../js/services/profile.js');
-const { ACHIEVEMENTS, SKINS } = await import('../js/data/config.js');
+const { ACHIEVEMENTS, SKINS, GEAR, resolveLoadout } = await import('../js/data/config.js');
 const { encodeCode, decodeCode } = await import('../js/services/net.js');
 
 test('a fresh profile has sane defaults', () => {
@@ -68,12 +68,41 @@ test('only unlocked skins can be equipped', () => {
   assert.equal(profile.get().equippedSkin, current, 'a locked skin must not equip');
 });
 
-test('best times only improve', () => {
-  assert.equal(profile.recordClear(7, 9000), true, 'first clear is a best');
-  assert.equal(profile.recordClear(7, 12000), false, 'slower run is not');
+test('best times only improve, and clears are counted', () => {
+  const first = profile.recordClear(7, 9000);
+  assert.equal(first.isNewBest, true, 'first clear is a best');
+  assert.equal(first.firstClear, true, 'and is flagged as the first');
+  assert.equal(first.clears, 1);
+
+  const slower = profile.recordClear(7, 12000);
+  assert.equal(slower.isNewBest, false, 'a slower run is not a best');
+  assert.equal(slower.firstClear, false, 'and is not a first clear');
+  assert.equal(slower.clears, 2, 'but still counts as a replay');
   assert.equal(profile.getBest(7), 9000);
-  assert.equal(profile.recordClear(7, 4000), true, 'faster run is');
+
+  const faster = profile.recordClear(7, 4000);
+  assert.equal(faster.isNewBest, true, 'a faster run is');
   assert.equal(profile.getBest(7), 4000);
+  assert.equal(profile.clearCount(7), 3);
+});
+
+test('gear is bought once and folds into a loadout', () => {
+  const cheap = [...GEAR].sort((a, b) => a.cost - b.cost)[0];
+
+  profile.addTips(50000);
+  assert.equal(profile.purchaseGear(cheap.id, cheap.cost), true);
+  assert.equal(profile.ownsGear(cheap.id), true);
+  assert.equal(profile.purchaseGear(cheap.id, cheap.cost), false, 'cannot buy twice');
+
+  const loadout = profile.loadout();
+  assert.deepEqual(loadout, resolveLoadout(profile.get().ownedGear));
+});
+
+test('an unaffordable piece of gear cannot be bought', () => {
+  const dear = [...GEAR].sort((a, b) => b.cost - a.cost)[0];
+  const before = profile.get().tips;
+  assert.equal(profile.purchaseGear(dear.id, before + 1), false);
+  assert.equal(profile.get().tips, before, 'tips are untouched by a failed purchase');
 });
 
 test('custom levels round-trip and delete', () => {

@@ -305,7 +305,231 @@ NEW.push(level(45, 'LAST DELIVERY', 'Everything Bert taught you, in one shift.',
     pickup('speed', 5060, 320),
   ],
   physics: { wallSlideEnabled: true },
+}));
+
+// --- the vertical act ------------------------------------------------------
+//
+// Everything above is mostly horizontal. These are climbs, where height is the
+// problem and the whole moveset is the answer: shelves 260-300px apart can only
+// be taken with a bag bounce, shafts are climbed on wall kicks, and the gaps in
+// between are air jumps.
+
+/** Alternating shelves up a shaft, at a fixed vertical spacing. */
+function climb(count, { top, spacing, left = 120, right = 480, width = 200, startSide = 0 }) {
+  return Array.from({ length: count }, (_, i) =>
+    ledge((i + startSide) % 2 === 0 ? left : right, top + i * spacing, width));
+}
+
+// 46 — a pure bag-bounce climb. 270px between shelves: nothing else reaches.
+NEW.push(level(46, 'TOWER BLOCK', 'Throw the bag up. Follow it. Every floor.', {
+  width: 800, height: 3200, theme: 'vertical', background: '#1e1b4b',
+  startPos: { x: 360, y: 3060 }, foodPos: { x: 400, y: 3060 },
+  goalPos: { x: 400, y: 240 },
+  platforms: [
+    solid(0, 3110, 800, 90),
+    ...climb(10, { top: 380, spacing: 270 }),
+    solid(280, 300, 240, 40),
+  ],
+  powerups: [
+    pickup('magnet', 150, 2790),
+    pickup('magnet', 510, 1980),
+    pickup('magnet', 150, 1170),
+  ],
+}));
+
+// 47 — a stairwell of wall kicks. Each shaft is a 620px climb, comfortably
+//      inside the 847px a wall climb measures, with a landing between them.
+NEW.push(level(47, 'STAIRWELL', 'Up the walls, across the landings.', {
+  width: 800, height: 3600, theme: 'vertical', background: '#0f172a',
+  startPos: { x: 360, y: 3470 }, foodPos: { x: 400, y: 3470 },
+  goalPos: { x: 400, y: 260 },
+  platforms: [
+    solid(0, 3520, 800, 80),
+    ...Array.from({ length: 5 }, (_, i) => {
+      const landing = 2900 - i * 620;       // 3520 -> 2900 -> 2280 -> ...
+      return [
+        wall(120, landing + 60, 560, 50),
+        wall(560, landing + 60, 560, 50),
+        ledge(240, landing, 320),
+      ];
+    }).flat(),
+    solid(280, 320, 240, 40),
+  ],
+  physics: { wallSlideEnabled: true },
+}));
+
+// 48 — lifts and bag bounces together.
+NEW.push(level(48, 'THE ATRIUM', 'Ride what moves. Throw for the rest.', {
+  width: 800, height: 3400, theme: 'vertical', background: '#134e4a',
+  startPos: { x: 360, y: 3270 }, foodPos: { x: 400, y: 3270 },
+  goalPos: { x: 400, y: 230 },
+  platforms: [
+    solid(0, 3320, 800, 80),
+    mover(300, 3200, 200, { velY: -2.5, range: 900 }),
+    ledge(100, 2260, 200),
+    ledge(500, 1990, 200),
+    mover(300, 1900, 200, { velY: -2.5, range: 800 }),
+    ledge(100, 1060, 200),
+    ledge(500, 790, 200),
+    mover(300, 700, 200, { velY: -2, range: 400 }),
+    solid(280, 280, 240, 40),
+  ],
+}));
+
+// 49 — a vent shaft: slide through the low gaps, kick up between them.
+NEW.push(level(49, 'VENT SHAFT', 'Too low to stand. Too high to walk.', {
+  width: 800, height: 2800, theme: 'vertical', background: '#1c1917',
+  startPos: { x: 360, y: 2670 }, foodPos: { x: 400, y: 2670 },
+  goalPos: { x: 400, y: 240 },
+  platforms: [
+    solid(0, 2720, 800, 80),
+    ...Array.from({ length: 6 }, (_, i) => {
+      const y = 2380 - i * 400;
+      const holeLeft = i % 2 === 0;
+      const x = holeLeft ? 220 : 0;
+      return [ledge(x, y, 580), solid(x, y - 120, 580, 90)];
+    }).flat(),
+    wall(0, 300, 2100, 40),
+    wall(760, 300, 2100, 40),
+    solid(280, 300, 240, 40),
+  ],
+  physics: { wallSlideEnabled: true },
+}));
+
+// 50 — scaffolding that disappears under you, climbed on bounces and kicks.
+NEW.push(level(50, 'SCAFFOLD', 'Keep moving. None of it holds.', {
+  width: 800, height: 3400, theme: 'vertical', background: '#3f3f46',
+  startPos: { x: 360, y: 3270 }, foodPos: { x: 400, y: 3270 },
+  goalPos: { x: 400, y: 230 },
+  platforms: [
+    solid(0, 3320, 800, 80),
+    wall(40, 500, 2700, 40),
+    wall(720, 500, 2700, 40),
+    ...Array.from({ length: 12 }, (_, i) =>
+      vanish(i % 2 === 0 ? 160 : 460, 3060 - i * 240, 180)),
+    solid(280, 280, 240, 40),
+  ],
+  powerups: [pickup('magnet', 200, 2980), pickup('shield', 500, 1620)],
+  physics: { wallSlideEnabled: true },
+}));
+
+// 51 — a descent instead of a climb.
+NEW.push(level(51, 'FREE FALL', 'Down is the easy direction. Mind the edges.', {
+  width: 900, height: 3600, theme: 'vertical', background: '#450a0a',
+  startPos: { x: 420, y: 280 }, foodPos: { x: 460, y: 280 },
+  goalPos: { x: 450, y: 3420 },
+  platforms: [
+    solid(300, 340, 300, 40),
+    ...Array.from({ length: 11 }, (_, i) => {
+      const y = 600 + i * 260;
+      return i % 2 === 0
+        ? [ledge(0, y, 520), spikes(0, y - 20, 520)]
+        : [ledge(380, y, 520), spikes(380, y - 20, 520)];
+    }).flat(),
+    solid(0, 3470, 900, 130),
+  ],
+  powerups: [pickup('shield', 420, 540), pickup('shield', 120, 1840)],
+}));
+
+// 52 — the long climb: every mechanic, one shaft. Each section is sized to the
+//      move it is asking for — 600px shafts for kicks, 270px steps for bounces.
+NEW.push(level(52, 'THE SPIRE', 'The whole job, straight up.', {
+  width: 800, height: 4600, theme: 'vertical', background: '#312e81',
+  startPos: { x: 360, y: 4470 }, foodPos: { x: 400, y: 4470 },
+  goalPos: { x: 400, y: 260 },
+  platforms: [
+    solid(0, 4520, 800, 80),
+    // 1: two wall-kick shafts, 600px each
+    wall(120, 3980, 540, 50),
+    wall(560, 3980, 540, 50),
+    ledge(240, 3920, 320),
+    wall(120, 3380, 540, 50),
+    wall(560, 3380, 540, 50),
+    ledge(240, 3320, 320),
+    // 2: bag-bounce steps, 270px apart
+    ledge(120, 3050, 200),
+    ledge(480, 2780, 200),
+    ledge(120, 2510, 200),
+    // 3: a lift up the middle
+    mover(300, 2420, 200, { velY: -3, range: 700 }),
+    ledge(480, 1660, 200),
+    // 4: vanishing steps, 200px apart so an air jump carries them
+    ...Array.from({ length: 5 }, (_, i) => vanish(i % 2 === 0 ? 150 : 470, 1460 - i * 200, 180)),
+    // 5: a last shaft to the roof
+    wall(120, 400, 480, 50),
+    wall(560, 400, 480, 50),
+    solid(280, 320, 240, 40),
+  ],
+  powerups: [
+    pickup('magnet', 200, 3840),
+    pickup('shield', 520, 2700),
+    pickup('jump', 200, 1380),
+  ],
+  physics: { wallSlideEnabled: true },
+}));
+
+// 53 — the closer. Bounce steps at 270px, a 600px shaft, lifts past the
+//      lasers, a vanishing run, and one last bounce onto the roof.
+NEW.push(level(53, 'PENTHOUSE RUN', 'Top floor. He is waiting.', {
+  width: 900, height: 5000, theme: 'vertical', background: '#0b0b12',
+  startPos: { x: 420, y: 4870 }, foodPos: { x: 460, y: 4870 },
+  goalPos: { x: 450, y: 300 },
+  platforms: [
+    solid(0, 4920, 900, 80),
+    // Opening climb on bag bounces
+    ledge(160, 4650, 220),
+    ledge(540, 4380, 220),
+    ledge(160, 4110, 220),
+    // Wall shaft
+    wall(160, 3560, 560, 50),
+    wall(680, 3560, 560, 50),
+    ledge(280, 3500, 380),
+    // Lift past the lasers
+    mover(360, 3400, 220, { velY: -3, range: 900 }),
+    laser(220, 2800, 300, { interval: 1800, offset: 0 }),
+    laser(700, 2800, 300, { interval: 1800, offset: 900 }),
+    ledge(160, 2440, 220),
+    // Vanishing run, 210px steps
+    ...Array.from({ length: 6 }, (_, i) => vanish(i % 2 === 0 ? 520 : 180, 2230 - i * 210, 200)),
+    // Final bounce onto the roof
+    ledge(520, 900, 220),
+    ledge(180, 630, 220),
+    solid(300, 360, 300, 40),
+  ],
+  powerups: [
+    pickup('magnet', 220, 4570),
+    pickup('shield', 320, 3420),
+    pickup('magnet', 560, 2150),
+  ],
+  physics: { wallSlideEnabled: true },
   isFinalLevel: true,
+}));
+
+// 54 — ice. Normal platforms grip hard; these do not, which is the whole
+//      obstacle. Stopping is the difficulty, not moving.
+NEW.push(level(54, 'COLD STORAGE', 'Nothing here grips. Plan your stops.', {
+  width: 5200, height: 800, theme: 'horizontal', background: '#0e7490',
+  startPos: { x: 90, y: 552 }, foodPos: { x: 130, y: 552 },
+  goalPos: { x: 5020, y: 550 },
+  platforms: [
+    solid(0, 600, 900),
+    solid(1180, 600, 620),
+    solid(2080, 600, 620),
+    solid(2980, 600, 620),
+    solid(3880, 600, 520),
+    solid(4680, 600, 520),
+    spikes(940, 780, 200),
+    spikes(1840, 780, 200),
+    spikes(2740, 780, 200),
+    spikes(3640, 780, 200),
+    spikes(4440, 780, 200),
+    // Narrow shelves you have to stop on, which is the hard part on ice.
+    ledge(1360, 420, 140),
+    ledge(2260, 420, 140),
+    ledge(3160, 420, 140),
+  ],
+  powerups: [pickup('magnet', 300, 540), pickup('shield', 2180, 540)],
+  physics: { friction: 0.985 },
 }));
 
 // --- rewrite levels.js -----------------------------------------------------
