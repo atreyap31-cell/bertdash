@@ -11,7 +11,7 @@ import { audio } from '../services/audio.js';
 /** Used when no gear is supplied, e.g. in tests. */
 const DEFAULT_LOADOUT = {
   airJumps: PHYSICS.airJumps,
-  bagBounces: PHYSICS.bagBounceLimit,
+  bagWallBounces: PHYSICS.bagWallBounces,
   catchRadius: PHYSICS.catchRadius,
   magnetRadius: PHYSICS.magnetCatchRadius,
   magnetDuration: PHYSICS.magnetFrames,
@@ -139,7 +139,7 @@ export class Game {
       airborne: false,
       catchCooldown: 0,
       magnetised: false,
-      bouncesLeft: this.loadout.bagBounces,
+      wallBouncesLeft: this.loadout.bagWallBounces,
     };
     this.camera = {
       x: clamp(start.x - VIEW_W / 2, 0, Math.max(0, this.level.width - VIEW_W)),
@@ -818,7 +818,7 @@ export class Game {
     this.food.vx = (dx / dist) * power + p.vx * PHYSICS.throwInherit * PHYSICS.emptyHandBonus;
     this.food.vy = (dy / dist) * power + p.vy * PHYSICS.throwInheritY;
     this.food.catchCooldown = PHYSICS.catchCooldown;
-    this.food.bouncesLeft = this.loadout.bagBounces;
+    this.food.wallBouncesLeft = this.loadout.bagWallBounces;
 
     this.#bump('foodThrown');
     this.#addFlow('throw');
@@ -937,35 +937,35 @@ export class Game {
       return;
     }
 
-    // A thrown bag survives a couple of glancing hits. Each one is loud and
-    // obvious, and gives you a window to chase it down — a bad throw is a
-    // scramble rather than an instant loss.
+    // What a hit does depends on which face the bag caught.
     const box = { x: f.x, y: f.y, width: f.size, height: f.size };
     for (const plat of this.level.platforms) {
       if (!this.#isSolidNow(plat)) continue;
       if (!overlaps(box, plat)) continue;
 
-      if (f.bouncesLeft <= 0) { this.#kill('DROPPED'); return; }
-
-      f.bouncesLeft--;
-      // Push it out of the surface and reflect off whichever face it hit.
+      // Work out the shallowest axis of overlap: that is the face it hit.
       const fromTop = (f.y + f.size) - plat.y;
       const fromBottom = (plat.y + plat.height) - f.y;
       const fromLeft = (f.x + f.size) - plat.x;
       const fromRight = (plat.x + plat.width) - f.x;
-      const least = Math.min(fromTop, fromBottom, fromLeft, fromRight);
+      const sideways = Math.min(fromLeft, fromRight) < Math.min(fromTop, fromBottom);
 
-      if (least === fromTop) { f.y = plat.y - f.size; f.vy = -Math.abs(f.vy) * PHYSICS.bagBounceDamp; }
-      else if (least === fromBottom) { f.y = plat.y + plat.height; f.vy = Math.abs(f.vy) * PHYSICS.bagBounceDamp; }
-      else if (least === fromLeft) { f.x = plat.x - f.size; f.vx = -Math.abs(f.vx) * PHYSICS.bagBounceDamp; }
-      else { f.x = plat.x + plat.width; f.vx = Math.abs(f.vx) * PHYSICS.bagBounceDamp; }
+      // Floors and ceilings break it. Throwing the bag at the ground ends the
+      // delivery — that is the risk that makes the throw a decision.
+      if (!sideways || f.wallBouncesLeft <= 0) { this.#kill('DROPPED'); return; }
 
-      // A bag that has stopped moving has come to rest on the floor: gone.
-      if (Math.hypot(f.vx, f.vy) < PHYSICS.bagRestSpeed) { this.#kill('DROPPED'); return; }
+      // A wall only glances it. Most of the sideways speed is gone and some of
+      // the fall speed with it, so the bag hangs by the wall long enough to
+      // dive up and catch.
+      f.wallBouncesLeft--;
+      if (fromLeft < fromRight) f.x = plat.x - f.size;
+      else f.x = plat.x + plat.width;
+      f.vx = (fromLeft < fromRight ? -1 : 1) * Math.abs(f.vx) * PHYSICS.bagWallBounceDamp;
+      f.vy *= PHYSICS.bagWallLift;
 
-      this.shake = this.reducedFlash ? 2 : 6;
+      this.shake = this.reducedFlash ? 1 : 3;
       audio.land();
-      this.#spawnParticles(f.x + f.size / 2, f.y + f.size / 2, 8, COLORS.spike);
+      this.#spawnParticles(f.x + f.size / 2, f.y + f.size / 2, 5, COLORS.food);
       return;
     }
     if (f.y > this.level.height + 400) this.#kill('DROPPED');
@@ -1284,7 +1284,7 @@ export class Game {
       flowRatio: Math.min(1, this.flow / FLOW.max),
       flowTimeLeft: this.flowTimer / FLOW.window,
       flowMultiplier: this.flowMultiplier(),
-      bagBouncesLeft: this.food.airborne ? this.food.bouncesLeft : null,
+      bagWallBouncesLeft: this.food.airborne ? this.food.wallBouncesLeft : null,
       paused: this.paused,
     };
   }

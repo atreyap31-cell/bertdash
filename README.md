@@ -39,8 +39,14 @@ overlay shows exactly what the engine is registering.
 
 ### The bag is the whole game
 
-Your hands are free once it is thrown, so you move faster — but if the bag hits
-anything it takes damage, and the third hit loses the delivery.
+Your hands are free once it is thrown, so you move faster — but where the bag
+lands decides the run:
+
+- **A floor or ceiling breaks it.** Throw it at the ground and the delivery is
+  over. That is the risk that keeps the throw a decision.
+- **A wall only glances it.** It barely rebounds, sheds some fall speed and
+  hangs by the wall, so a throw into a wall is something you can dive up and
+  catch rather than a loss. Two glances before it gives out.
 
 - **Bag bounce.** Throw it straight up while running, jump after it, catch it in
   mid-air. The catch launches you ~320px, nearly double a jump, and hands back
@@ -92,7 +98,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-84 tests across five suites:
+86 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it

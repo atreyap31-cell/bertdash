@@ -114,13 +114,18 @@ export const PHYSICS = {
   boostFrames: 80,
   boostRecharge: 200,
 
-  // The bag survives a couple of glancing hits before the delivery is blown.
-  // A throw that touches anything used to be an instant loss, which made
-  // throwing a coin flip rather than a decision; now a bad throw is a scramble
-  // you can still recover from.
-  bagBounceLimit: 2,
-  bagBounceDamp: 0.55,
-  bagRestSpeed: 1.2,      // slower than this after a bounce and it is lost
+  // What happens when a thrown bag hits something depends on which way the
+  // surface faces.
+  //
+  // A wall glances it off: the bag barely rebounds sideways, keeps whatever
+  // vertical motion it had, and stays catchable — so a throw into a wall is a
+  // scramble you can dive after, not a loss.
+  //
+  // A floor or a ceiling breaks it outright. Throwing the bag at the ground
+  // ends the delivery, which is what keeps the throw a real decision.
+  bagWallBounces: 2,      // how many wall glances before it gives out
+  bagWallBounceDamp: 0.3, // barely bounces: most of the sideways speed is gone
+  bagWallLift: 0.55,      // a wall glance sheds some fall speed, so it hangs
 
   buffFrames: 420,
   speedBuff: 1.5,
@@ -302,7 +307,7 @@ export const GEAR_BY_ID = Object.fromEntries(GEAR.map(g => [g.id, g]));
 export function resolveLoadout(ownedIds = []) {
   const loadout = {
     airJumps: PHYSICS.airJumps,
-    bagBounces: PHYSICS.bagBounceLimit,
+    bagWallBounces: PHYSICS.bagWallBounces,
     catchRadius: PHYSICS.catchRadius,
     magnetRadius: PHYSICS.magnetCatchRadius,
     magnetDuration: PHYSICS.magnetFrames,
@@ -317,7 +322,7 @@ export function resolveLoadout(ownedIds = []) {
     const effect = GEAR_BY_ID[id]?.effect;
     if (!effect) continue;
     if (effect.airJumps) loadout.airJumps += effect.airJumps;
-    if (effect.bagBounces) loadout.bagBounces += effect.bagBounces;
+    if (effect.bagWallBounces) loadout.bagWallBounces += effect.bagWallBounces;
     if (effect.catchRadius) loadout.catchRadius *= effect.catchRadius;
     if (effect.magnetRadius) loadout.magnetRadius *= effect.magnetRadius;
     if (effect.magnetDuration) loadout.magnetDuration *= effect.magnetDuration;

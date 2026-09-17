@@ -584,27 +584,81 @@ test('mashing one move does not build flow as fast as varying them', () => {
 
 // --- a thrown bag is recoverable -------------------------------------------
 
-test('a thrown bag survives a couple of hits before it is lost', () => {
-  const { game, canvas, events } = boot();
+test('a bag thrown at the floor breaks on impact', () => {
+  const { game, events } = boot();
   advance(40);
-  throwDir(['down', 'right'], 1);   // straight into the floor
+  throwDir(['down', 'right'], 1);        // straight into the floor
 
-  let bounced = false;
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 200 && !events.lose; i++) advance(1);
+  assert.equal(events.lose, 'DROPPED', 'hitting the ground ends the delivery');
+  assert.equal(game.food.wallBouncesLeft, PHYSICS.bagWallBounces,
+    'a floor hit should not have spent a wall glance — it just breaks');
+});
+
+test('a bag thrown at a wall glances off instead of breaking', () => {
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      { x: 600, y: -200, width: 60, height: 700, type: 'static' },  // a tall wall
+    ],
+  });
+  const { game, events } = boot(level);
+  advance(40);
+
+  // Lofted into the wall's side: thrown flat it would reach the floor first.
+  throwDir(['up', 'right'], PHYSICS.throwChargeFrames);
+
+  let glanced = false;
+  for (let i = 0; i < 60; i++) {
     advance(1);
-    if (game.food.bouncesLeft < PHYSICS.bagBounceLimit) bounced = true;
-    if (events.lose) break;
+    if (game.food.wallBouncesLeft < PHYSICS.bagWallBounces) { glanced = true; break; }
   }
-  assert.ok(bounced, 'the bag should have bounced rather than dying on contact');
+
+  assert.ok(glanced, 'the bag should have glanced off the wall');
+  assert.equal(events.lose, null, 'and not been lost');
+  assert.ok(game.food.airborne, 'it should still be in play');
+});
+
+test('a wall glance barely rebounds, so the bag stays catchable', () => {
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      { x: 600, y: -200, width: 60, height: 700, type: 'static' },
+    ],
+  });
+  const { game } = boot(level);
+  advance(40);
+
+  throwDir(['up', 'right'], PHYSICS.throwChargeFrames);
+  const thrownSpeed = Math.abs(game.food.vx);
+
+  for (let i = 0; i < 60; i++) {
+    advance(1);
+    if (game.food.wallBouncesLeft < PHYSICS.bagWallBounces) break;
+  }
+
+  assert.ok(Math.abs(game.food.vx) < thrownSpeed * 0.5,
+    `the rebound (${Math.abs(game.food.vx).toFixed(1)}) should be far softer than the throw `
+    + `(${thrownSpeed.toFixed(1)})`);
+  assert.ok(game.food.vx < 0, 'and should come back towards the player');
   game.destroy();
 });
 
-test('a bag that keeps hitting things is eventually lost', () => {
-  const { game, canvas, events } = boot();
+test('a bag that has used up its wall glances breaks on the next one', () => {
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      { x: 600, y: -200, width: 60, height: 700, type: 'static' },
+    ],
+  });
+  const { game, events } = boot(level);
   advance(40);
-  throwDir(['down', 'right'], 1);
-  for (let i = 0; i < 400 && !events.lose; i++) advance(1);
-  assert.equal(events.lose, 'DROPPED', 'it cannot bounce forever');
+
+  throwDir(['up', 'right'], PHYSICS.throwChargeFrames);
+  game.food.wallBouncesLeft = 0;       // as if it had already glanced twice
+
+  for (let i = 0; i < 120 && !events.lose; i++) advance(1);
+  assert.equal(events.lose, 'DROPPED', 'the glances are not unlimited');
 });
 
 // --- gear ------------------------------------------------------------------
@@ -614,14 +668,14 @@ test('gear changes what the player can do', () => {
   resetClock();
   const game = new Game(canvas, fixture(), {
     skin: { color: '#06c167', textColor: '#fff' },
-    loadout: { airJumps: 3, catchRadius: 120, bagBounces: 5 },
+    loadout: { airJumps: 3, catchRadius: 120, bagWallBounces: 5 },
     onWin: () => {}, onLose: () => {}, onStats: () => {},
   });
   game.start();
   advance(40);
 
   assert.equal(game.player.airJumps, 3, 'extra air jumps should be granted');
-  assert.equal(game.food.bouncesLeft, 5, 'a reinforced bag should take more hits');
+  assert.equal(game.food.wallBouncesLeft, 5, 'a reinforced bag should take more wall glances');
 
   // All three air jumps should be spendable.
   jump(12);

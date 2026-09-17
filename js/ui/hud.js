@@ -100,7 +100,7 @@ export class Hud {
 
     const status = state.dead ? 'LOST'
       : state.foodAirborne
-        ? (state.bagBouncesLeft === 0 ? 'FRAGILE!' : 'AIRBORNE')
+        ? (state.bagWallBouncesLeft === 0 ? 'FRAGILE!' : 'AIRBORNE')
       : state.hasFood ? 'IN HAND'
       : 'DROPPING';
     if (this.foodEl.textContent !== status) {
