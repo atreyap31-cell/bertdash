@@ -532,6 +532,201 @@ NEW.push(level(54, 'COLD STORAGE', 'Nothing here grips. Plan your stops.', {
   physics: { friction: 0.985 },
 }));
 
+// --- the hard act ----------------------------------------------------------
+//
+// These force the moves rather than offering them. A bag-bounce gate is a shelf
+// 280px up with no wall and no alternative route: nothing else in the moveset
+// reaches it. A kick chain is a shaft with no ledges in it. An air delivery is
+// Bert on an island you cannot stand on.
+//
+// The reachability test is what keeps them honest — each one is only solvable
+// through the move it is built around.
+
+const hintZone = (x, y, text, width = 460, height = 340) => ({ x, y, width, height, text });
+
+// 55 — bag bounce, over and over, with nothing else that reaches.
+NEW.push(level(55, 'THE STACK', 'Every floor needs the bag.', {
+  width: 800, height: 3600, theme: 'vertical', background: '#1e1b4b',
+  startPos: { x: 340, y: 3452 }, foodPos: { x: 380, y: 3452 },
+  goalPos: { x: 400, y: 260 },
+  platforms: [
+    solid(0, 3500, 800, 100),
+    // Twelve shelves at 270: the bag bounce, twelve times, with no walls to
+    // kick off and no ledges in between.
+    ...Array.from({ length: 12 }, (_, i) =>
+      ledge(i % 2 === 0 ? 120 : 460, 3230 - i * 270, 220)),
+    solid(280, 320, 240, 40),
+  ],
+  hints: [
+    hintZone(60, 3150, 'No walls, no shortcuts. Throw, jump, catch — twelve times.', 700, 300),
+  ],
+}));
+
+// 56 — a kick chain with nothing to stand on for the whole climb.
+NEW.push(level(56, 'NO HANDHOLDS', 'There is nowhere to stop.', {
+  width: 800, height: 3000, theme: 'vertical', background: '#0f172a',
+  startPos: { x: 360, y: 2852 }, foodPos: { x: 400, y: 2852 },
+  goalPos: { x: 400, y: 260 },
+  platforms: [
+    solid(0, 2900, 800, 100),
+    // Four shafts, each a 640px climb, separated by the thinnest landings.
+    ...Array.from({ length: 4 }, (_, i) => {
+      const landing = 2260 - i * 640;
+      return [
+        wall(120, landing + 60, 580, 50),
+        wall(600, landing + 60, 580, 50),
+        ledge(330, landing, 140),
+      ];
+    }).flat(),
+    solid(300, 320, 200, 40),
+    // Falling the whole way down is fatal, but leave the spawn itself clear.
+    spikes(0, 2880, 280),
+    spikes(560, 2880, 240),
+  ],
+  physics: { wallSlideEnabled: true },
+  hints: [
+    hintZone(60, 2600, 'The landings are barely wider than you are. Keep the chain going.', 700, 280),
+  ],
+}));
+
+// 57 — Bert on an island. The only way to reach him is to throw.
+NEW.push(level(57, 'SPECIAL DELIVERY', 'You cannot get there. The bag can.', {
+  width: 5200, height: 900, theme: 'horizontal', background: '#0c4a6e',
+  startPos: { x: 90, y: 652 }, foodPos: { x: 130, y: 652 },
+  goalPos: { x: 4560, y: 400 },
+  platforms: [
+    solid(0, 700, 900),
+    solid(1300, 700, 600),
+    solid(2300, 700, 600),
+    solid(3300, 640, 600, 260),
+    // Bert's island: too far to jump to, comfortably inside a charged throw.
+    solid(4500, 440, 400, 460),
+    spikes(920, 880, 360),
+    spikes(1920, 880, 360),
+    spikes(2920, 880, 360),
+    spikes(3920, 880, 560),
+  ],
+  powerups: [pickup('speed', 3400, 580)],
+  hints: [
+    hintZone(3280, 300, 'That gap is not crossable. Charge a throw and land the bag on Bert instead.', 620, 400),
+  ],
+}));
+
+// 58 — long jumps and bounces alternating, no safe ground between.
+NEW.push(level(58, 'PIECEWORK', 'Slide, launch, throw, catch. Repeat.', {
+  width: 6000, height: 1200, theme: 'horizontal', background: '#312e81',
+  startPos: { x: 90, y: 952 }, foodPos: { x: 130, y: 952 },
+  goalPos: { x: 5800, y: 340 },
+  platforms: [
+    solid(0, 1000, 700),
+    // Long jump...
+    solid(1320, 1000, 420),
+    // ...then a bounce up...
+    ledge(1900, 720, 220),
+    // ...then a long jump from height...
+    solid(2500, 720, 420),
+    ledge(3100, 440, 220),
+    solid(3700, 440, 420),
+    ledge(4300, 720, 220),
+    solid(4900, 720, 420),
+    solid(5600, 400, 400, 800),
+    spikes(720, 1180, 580),
+    spikes(1760, 1180, 720),
+    spikes(2940, 1180, 1340),
+    spikes(4340, 1180, 540),
+  ],
+  powerups: [pickup('magnet', 300, 940), pickup('magnet', 2560, 660)],
+  hints: [
+    hintZone(60, 620, 'Nothing here is a plain jump. Slide into the long ones, throw for the high ones.', 640, 380),
+  ],
+}));
+
+// 59 — a descent where the only brakes are dives.
+NEW.push(level(59, 'TERMINAL VELOCITY', 'Down, fast, through all of it.', {
+  width: 1000, height: 4200, theme: 'vertical', background: '#450a0a',
+  startPos: { x: 440, y: 292 }, foodPos: { x: 480, y: 292 },
+  goalPos: { x: 500, y: 4020 },
+  platforms: [
+    solid(340, 340, 320, 40),
+    ...Array.from({ length: 13 }, (_, i) => {
+      const y = 620 + i * 260;
+      const left = i % 2 === 0;
+      return [
+        ledge(left ? 0 : 560, y, 440),
+        spikes(left ? 0 : 560, y - 20, 440),
+        ...(i % 3 === 2
+          ? [laser(left ? 520 : 440, y - 260, 240, { interval: 1700, offset: i * 240 })]
+          : []),
+      ];
+    }).flat(),
+    solid(0, 4070, 1000, 130),
+  ],
+  powerups: [pickup('shield', 460, 560), pickup('shield', 120, 2180), pickup('shield', 640, 3220)],
+  hints: [
+    hintZone(60, 420, 'Every shelf is spiked on top. Fall through the gaps, and dive to steer.', 880, 220),
+  ],
+}));
+
+// 60 — vanishing steps with bag bounces between them.
+NEW.push(level(60, 'NOTHING HOLDS', 'The floor leaves before you do.', {
+  width: 800, height: 3800, theme: 'vertical', background: '#134e4a',
+  startPos: { x: 340, y: 3652 }, foodPos: { x: 380, y: 3652 },
+  goalPos: { x: 400, y: 280 },
+  platforms: [
+    solid(0, 3700, 800, 100),
+    // Vanishing pairs at 250, so you bounce off one before it goes.
+    ...Array.from({ length: 13 }, (_, i) =>
+      vanish(i % 2 === 0 ? 130 : 470, 3450 - i * 250, 200)),
+    solid(280, 340, 240, 40),
+  ],
+  powerups: [pickup('magnet', 200, 3600), pickup('magnet', 520, 1950)],
+  hints: [
+    hintZone(60, 3350, 'Each step fades the moment you touch it. Do not stop.', 700, 280),
+  ],
+}));
+
+// 61 — the gauntlet: every move, in sequence, no margin.
+NEW.push(level(61, 'DOUBLE SHIFT OVERTIME', 'All of it, back to back.', {
+  width: 7000, height: 1400, theme: 'horizontal', background: '#0b0b12',
+  startPos: { x: 90, y: 1152 }, foodPos: { x: 130, y: 1152 },
+  goalPos: { x: 6750, y: 380 },
+  platforms: [
+    solid(0, 1200, 600),
+    // 1: long jumps
+    solid(1220, 1200, 400),
+    solid(2240, 1200, 400),
+    spikes(640, 1380, 560),
+    spikes(1660, 1380, 540),
+    // 2: a kick shaft
+    wall(2760, 620, 580),
+    wall(3200, 620, 580),
+    ledge(2880, 1160, 280),
+    ledge(2900, 580, 260),
+    // 3: bounce steps
+    ledge(3500, 580, 200),
+    ledge(4060, 310, 200),
+    // 4: a long drop onto a dive bounce
+    solid(4600, 1200, 500),
+    spikes(4160, 1380, 420),
+    // 5: laser run to Bert
+    solid(5400, 460, 1600, 940),
+    laser(5620, 180, 280, { interval: 1600, offset: 0 }),
+    laser(5960, 180, 280, { interval: 1600, offset: 530 }),
+    laser(6300, 180, 280, { interval: 1600, offset: 1060 }),
+    laser(6560, 180, 280, { interval: 1600, offset: 260 }),
+  ],
+  powerups: [
+    pickup('shield', 300, 1140),
+    pickup('magnet', 2940, 1100),
+    pickup('speed', 5460, 400),
+  ],
+  physics: { wallSlideEnabled: true },
+  hints: [
+    hintZone(60, 820, 'Last shift. Nothing here is optional.', 560, 340),
+  ],
+  isFinalLevel: true,
+}));
+
 // --- rewrite levels.js -----------------------------------------------------
 
 const levelsPath = join(ROOT, 'js/data/levels.js');
@@ -546,9 +741,12 @@ const existing = JSON.parse(source.slice(start, end));
 const base = existing.filter(l => l.id < 34);
 const combined = [...base, ...NEW];
 
+// Replace only the LEVELS literal. Everything after it — the TRAINING block,
+// CAMPAIGN_LENGTH, anything added later — is preserved verbatim, so running
+// this never clobbers what another generator wrote.
 const header = source.slice(0, source.indexOf(marker));
-const footer = source.slice(source.indexOf('\n\nexport const CAMPAIGN_LENGTH'));
-writeFileSync(levelsPath, `${header}${marker}${JSON.stringify(combined)};${footer}`);
+const tail = source.slice(end);   // from the ';' that closes the array
+writeFileSync(levelsPath, `${header}${marker}${JSON.stringify(combined)}${tail}`);
 
 console.log(`levels.js: ${combined.length} levels (${base.length} existing + ${NEW.length} new)\n`);
 for (const l of NEW) {

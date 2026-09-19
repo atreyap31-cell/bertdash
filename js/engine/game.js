@@ -87,6 +87,7 @@ export class Game {
     // Aim is a direction, not a screen position: the arrow keys choose it.
     this.aimDir = { x: 1, y: 0 };
     this.aiming = false;
+    this.hint = null;
     this.lastSteer = 1;   // which direction key was pressed most recently
     this.recentCatchAt = -Infinity; // gameplay ms of the last mid-air catch
     this.charging = false;          // mouse held: winding up a throw
@@ -307,6 +308,7 @@ export class Game {
     this.#stepFood();
     this.#stepPickups();
     this.#stepHazards();
+    this.#stepHint();
     this.#stepGoal();
     this.#stepParticles();
     this.#stepCamera();
@@ -883,21 +885,14 @@ export class Game {
     const dist = Math.hypot(dx, dy);
     if (dist < 0.01) return;
 
-    const power = this.throwPower();
+    const launch = this.launchVelocity();
     p.hasFood = false;
     this.food.airborne = true;
     this.food.magnetised = false;
     this.food.x = originX - FOOD_SIZE / 2;
     this.food.y = originY - FOOD_SIZE / 2;
-    // Your whole momentum goes into the bag: horizontal in full, vertical in
-    // large part. Throwing at the top of a bounce or out of a sprint sends it
-    // far further than a standing toss.
-    //
-    // The horizontal share is scaled by the empty-hands bonus, because the
-    // moment the bag leaves your hands you speed up by exactly that much.
-    // Without it you outrun your own throw and can never catch it again.
-    this.food.vx = (dx / dist) * power + p.vx * PHYSICS.throwInherit * PHYSICS.emptyHandBonus;
-    this.food.vy = (dy / dist) * power + p.vy * PHYSICS.throwInheritY;
+    this.food.vx = launch.x;
+    this.food.vy = launch.y;
     this.food.catchCooldown = PHYSICS.catchCooldown;
     this.food.wallBouncesLeft = this.loadout.bagWallBounces;
 
@@ -926,6 +921,23 @@ export class Game {
     }
     // With the bag in hand it is a flat dash the way you are already facing.
     return { x: originX + (p.facingRight ? 360 : -360), y: originY };
+  }
+
+  /**
+   * The velocity the bag would leave with right now, momentum included.
+   *
+   * The throw inherits the player's speed, so the bag does not travel along
+   * the raw aim direction — running right and aiming straight up sends it up
+   * and to the right. The aim indicator has to be drawn from this, or it
+   * points somewhere the bag will never go.
+   */
+  launchVelocity() {
+    const p = this.player;
+    const power = this.throwPower();
+    return {
+      x: this.aimDir.x * power + p.vx * PHYSICS.throwInherit * PHYSICS.emptyHandBonus,
+      y: this.aimDir.y * power + p.vy * PHYSICS.throwInheritY,
+    };
   }
 
   /** 0..1 — how far the current throw charge has wound up. */
@@ -1080,9 +1092,9 @@ export class Game {
 
     let x = originX;
     let y = originY;
-    const power = this.throwPower();
-    let vx = (dx / dist) * power + p.vx * PHYSICS.throwInherit * PHYSICS.emptyHandBonus;
-    let vy = (dy / dist) * power + p.vy * PHYSICS.throwInheritY;
+    const launch = this.launchVelocity();
+    let vx = launch.x;
+    let vy = launch.y;
     const gravity = PHYSICS.foodGravity * this.level.physics.gravityScale;
     const points = [];
 
@@ -1174,6 +1186,14 @@ export class Game {
         if (overlaps(box, plat) && plat.height > 24) return this.#kill('CRUSHED');
       }
     }
+  }
+
+  /** The prompt for whichever teaching zone the player is standing in. */
+  #stepHint() {
+    const p = this.player;
+    const box = { x: p.x, y: p.y, width: p.width, height: p.height };
+    const zone = this.level.hints.find(h => overlaps(box, h));
+    this.hint = zone?.text ?? null;
   }
 
   #stepGoal() {
@@ -1399,6 +1419,7 @@ export class Game {
       charging: this.charging,
       aiming: this.aiming,
       aimDir: this.aimDir,
+      hint: this.hint,
       started: this.started,
       flow: this.flow,
       flowRatio: Math.min(1, this.flow / FLOW.max),
@@ -1704,9 +1725,15 @@ export class Game {
     // keys choose this.
     if (p.hasFood) {
       const charge = this.chargeRatio();
+      // Drawn along the velocity the bag will actually leave with, so the
+      // arrow and the dotted arc always agree with each other.
+      const launch = this.launchVelocity();
+      const speed = Math.hypot(launch.x, launch.y) || 1;
+      const dirX = launch.x / speed;
+      const dirY = launch.y / speed;
       const length = 46 + charge * 54;
-      const tipX = originX + this.aimDir.x * length;
-      const tipY = originY + this.aimDir.y * length;
+      const tipX = originX + dirX * length;
+      const tipY = originY + dirY * length;
 
       ctx.save();
       ctx.globalAlpha = this.charging ? 0.95 : 0.4;
@@ -1714,12 +1741,12 @@ export class Game {
       ctx.lineWidth = 3;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(originX + this.aimDir.x * 20, originY + this.aimDir.y * 20);
+      ctx.moveTo(originX + dirX * 20, originY + dirY * 20);
       ctx.lineTo(tipX, tipY);
       ctx.stroke();
 
       // Arrowhead
-      const angle = Math.atan2(this.aimDir.y, this.aimDir.x);
+      const angle = Math.atan2(dirY, dirX);
       ctx.beginPath();
       ctx.moveTo(tipX, tipY);
       ctx.lineTo(tipX - Math.cos(angle - 0.4) * 13, tipY - Math.sin(angle - 0.4) * 13);

@@ -1,6 +1,6 @@
 # BertDash
 
-A browser platformer about delivering a takeaway bag across 55 hand-built levels.
+A browser platformer about delivering a takeaway bag across 62 hand-built levels, plus eight training lessons.
 Run, slide, dive and wall-jump to Bert before the food goes cold — and whatever
 you do, don't drop the bag.
 
@@ -57,6 +57,13 @@ lands decides the run:
   It is the fastest finish available and the hardest to pull off.
 - **Momentum carries.** The bag inherits your full speed, so a throw made at a
   sprint or off the top of a bounce goes far further than a standing toss.
+
+### Learning it
+
+There is a lot of moveset here, so **Training** on the menu is eight short
+lessons, one move each. Each is built so it cannot be finished without the move
+it teaches, with prompts that appear at the moment they matter. They are scored
+and saved like any level but sit outside the campaign numbering.
 
 ### Movement assists
 
@@ -134,12 +141,12 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-104 tests across five suites:
+106 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
   cannot be abused (no infinite air jumps, no free shields, no stuck crouch)
-- `fuzz` — drives all 55 levels with pseudo-random input across three seeds
+- `fuzz` — drives all 62 levels and 8 lessons with pseudo-random input across three seeds
   (~61k simulated frames) and asserts the simulation never breaks its own
   rules: no NaN, no escaping the level, no clipping into solid geometry
 - `reachability` — builds a graph of every standable surface in all 46 levels

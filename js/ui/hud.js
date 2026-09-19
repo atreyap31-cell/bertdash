@@ -58,6 +58,7 @@ export class Hud {
         this.flowEl,
         el('div.hud__abilities', Object.values(this.pips)),
         (this.buffsEl = el('div.hud__buffs')),
+        (this.hintEl = el('div.hud__hint', { hidden: true })),
       ]),
       el('div.hud__right', [
         el('button.btn.btn--sm.btn--ghost',
@@ -113,6 +114,13 @@ export class Hud {
     // Throw charge.
     this.chargeFill.style.width = `${Math.round(state.charge * 100)}%`;
     this.chargeFill.classList.toggle('is-full', state.charge >= 1);
+
+    // Teaching prompt for whatever the player is standing in.
+    if (state.hint !== this._hint) {
+      this._hint = state.hint;
+      this.hintEl.hidden = !state.hint;
+      if (state.hint) this.hintEl.textContent = state.hint;
+    }
 
     // Flow chain.
     const showFlow = state.flow > 0;

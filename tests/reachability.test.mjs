@@ -15,7 +15,10 @@ import { installGlobals } from './harness.mjs';
 
 installGlobals();
 
-const { LEVELS } = await import('../js/data/levels.js');
+const { LEVELS, TRAINING } = await import('../js/data/levels.js');
+
+// Training lessons get exactly the same scrutiny as the campaign.
+const ALL = [...LEVELS, ...TRAINING];
 const { prepareLevel, isSolidType } = await import('../js/engine/level.js');
 
 // rise / gap each move can manage, with a safety margin already applied.
@@ -35,6 +38,12 @@ const FALL_GAP = 760;     // how far you can drift sideways on the way down
 const WALL_CLIMB = 800;   // rise achievable by kicking between two walls
 const WALL_NEAR = 150;    // how close a wall must be to help
 const MARGIN = 12;        // required clearance, so nothing is frame-perfect
+
+// A charged 45-degree throw carries about 1067px at launch height, measured by
+// tools/throw-range.mjs. These are the conservative bounds under which a level
+// counts as solvable by throwing the bag to Bert rather than carrying it.
+const THROW_GAP = 700;
+const THROW_RISE = 250;
 
 /**
  * Every surface the player can land on, as a travel envelope rather than a
@@ -118,13 +127,25 @@ function analyse(raw) {
   const goalSurfaces = all.filter(s =>
     level.goalPos.x > s.x1 - 90 && level.goalPos.x < s.x2 + 90 &&
     s.yBottom > level.goalPos.y - 40 && s.yTop < level.goalPos.y + 220);
-  if (!goalSurfaces.length) return { ok: false, reason: 'nothing to stand on near Bert' };
+  // Bert may be somewhere you cannot stand at all — an island across a gap —
+  // in which case the level is solved by throwing the bag to him instead.
+  const canThrowTo = surface => {
+    const gap = Math.max(0,
+      Math.max(surface.x1 - level.goalPos.x, level.goalPos.x - surface.x2));
+    const rise = surface.yTop - level.goalPos.y;
+    return gap <= THROW_GAP && rise <= THROW_RISE;
+  };
+
+  if (!goalSurfaces.length && !all.some(canThrowTo)) {
+    return { ok: false, reason: 'Bert is neither standable-next-to nor within throwing range' };
+  }
 
   const seen = new Set([start.i]);
   const queue = [start];
   while (queue.length) {
     const current = queue.shift();
     if (goalSurfaces.some(g => g.i === current.i)) return { ok: true };
+    if (canThrowTo(current)) return { ok: true };   // deliver from range
     for (const next of all) {
       if (seen.has(next.i)) continue;
       if (!canReach(level, current, next)) continue;
@@ -140,7 +161,7 @@ function analyse(raw) {
 
 test('every level has a route from the spawn to Bert', () => {
   const broken = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     const result = analyse(raw);
     if (!result.ok) broken.push(`level ${raw.id} "${raw.title}": ${result.reason}`);
   }
@@ -149,7 +170,7 @@ test('every level has a route from the spawn to Bert', () => {
 
 test('the spawn is never buried inside solid geometry', () => {
   const buried = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     const level = prepareLevel(raw);
     const box = { x: level.startPos.x, y: level.startPos.y, width: 32, height: 48 };
     const hit = level.platforms.find(p =>
@@ -163,7 +184,7 @@ test('the spawn is never buried inside solid geometry', () => {
 
 test('the bag never starts somewhere it would immediately be lost', () => {
   const bad = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     const level = prepareLevel(raw);
     // The bag starts in hand, so it only needs to be near the player.
     const d = Math.hypot(level.foodPos.x - level.startPos.x, level.foodPos.y - level.startPos.y);
@@ -176,7 +197,7 @@ test('no level asks for a rise that no move can clear', () => {
   // Catches a shelf placed above even the bag bounce, which would be a
   // dead end that the route search might route around but a player could not.
   const problems = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     const level = prepareLevel(raw);
     const all = surfaces(level);
     for (const s of all) {
@@ -205,7 +226,7 @@ function boxesOverlap(a, b) {
 
 test('no level spawns the player on something lethal', () => {
   const problems = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     const level = prepareLevel(raw);
     const box = {
       x: level.startPos.x - SPAWN_GRACE,
@@ -228,7 +249,7 @@ test('no level spawns the player on something lethal', () => {
 test('no level drops the player onto something lethal', () => {
   // Standing still at the spawn must not land you on spikes either.
   const problems = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     const level = prepareLevel(raw);
     const feet = level.startPos.y + PLAYER_BOX.height;
     const below = level.platforms.filter(p =>

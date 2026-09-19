@@ -1150,3 +1150,76 @@ test('without Cold Chain the floor still breaks the bag immediately', () => {
   for (let i = 0; i < 200 && !events.lose; i++) advance(1);
   assert.equal(events.lose, 'DROPPED');
 });
+
+// --- aiming honesty --------------------------------------------------------
+
+const AIM_CODES = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+
+/** Angle in degrees, normalised to (-180, 180]. */
+function angleOf(x, y) { return Math.atan2(y, x) * 180 / Math.PI; }
+function angleGap(a, b) {
+  let d = a - b;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return Math.abs(d);
+}
+
+test('the aim arrow points where the bag actually goes', () => {
+  // The throw inherits the player's momentum, so the bag does not travel along
+  // the raw aim direction. The indicator has to be drawn from the real launch
+  // vector or it points somewhere the bag will never reach — running and
+  // aiming straight up used to be 37 degrees out.
+  const cases = [
+    { label: 'standing, up', run: 0, aim: ['up'] },
+    { label: 'running, up', run: 60, aim: ['up'] },
+    { label: 'running, up+right', run: 60, aim: ['up', 'right'] },
+    { label: 'running, down', run: 60, aim: ['down'] },
+  ];
+
+  for (const { label, run, aim } of cases) {
+    const { game } = boot(fixture({
+      width: 6000,
+      platforms: [{ x: 0, y: FLOOR_Y, width: 6000, height: 200, type: 'static' }],
+      goalPos: { x: 5900, y: 470 },
+    }));
+    advance(40);
+    if (run) { keys.down('KeyD'); advance(run); }
+
+    const codes = aim.map(d => AIM_CODES[d]);
+    codes.forEach(keys.down);
+    advance(1);
+    const shown = game.launchVelocity();
+    const shownAngle = angleOf(shown.x, shown.y);
+    codes.forEach(keys.up);
+    advance(1);
+
+    const actual = angleOf(game.food.vx, game.food.vy);
+    keys.up('KeyD');
+
+    assert.ok(angleGap(shownAngle, actual) <= 8,
+      `${label}: arrow showed ${shownAngle.toFixed(0)}deg but the bag went ${actual.toFixed(0)}deg`);
+    game.destroy();
+  }
+});
+
+test('the aim arrow and the predicted arc agree', () => {
+  const { game } = boot();
+  advance(40);
+  keys.down('KeyD');
+  advance(50);
+
+  keys.down('ArrowUp');
+  advance(1);
+  const shown = game.launchVelocity();
+  const arc = game.predictThrow();
+  keys.up('ArrowUp');
+  keys.up('KeyD');
+
+  assert.ok(arc.length > 1, 'there should be an arc');
+  // The first sampled point of the arc should lie along the launch vector.
+  const origin = { x: game.player.x + game.player.width / 2, y: game.player.y + game.player.height / 2 };
+  const toArc = angleOf(arc[0].x - origin.x, arc[0].y - origin.y);
+  assert.ok(angleGap(angleOf(shown.x, shown.y), toArc) <= 12,
+    'the arrow and the dotted arc should point the same way');
+  game.destroy();
+});

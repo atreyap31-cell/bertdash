@@ -48,3 +48,20 @@ Development scripts. Not part of the deployed site.
   ```bash
   node tools/spawn-audit.mjs
   ```
+
+- **`build-training.mjs`** — generates the eight training lessons into the
+  `TRAINING` export. Safe to re-run; it replaces only its own block, and
+  `build-levels.mjs` likewise replaces only `LEVELS`, so the two never clobber
+  each other.
+
+  ```bash
+  node tools/build-training.mjs && npm test
+  ```
+
+- **`throw-range.mjs`** — measures how far a charged throw actually carries.
+  The reachability analyser uses this to decide whether a level is solvable by
+  throwing the bag to Bert rather than carrying it there.
+
+  ```bash
+  node tools/throw-range.mjs
+  ```

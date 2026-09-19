@@ -2,7 +2,7 @@
 
 import { el, modal, toast, confirmDialog, formatTime, formatMoney } from './dom.js';
 import { SKINS, GEAR, GEAR_TIERS, ACHIEVEMENTS, ACTIONS, keyName, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
-import { LEVELS, CAMPAIGN_LENGTH } from '../data/levels.js';
+import { LEVELS, TRAINING, CAMPAIGN_LENGTH } from '../data/levels.js';
 import { profile } from '../services/profile.js';
 import { audio } from '../services/audio.js';
 import { peer } from '../services/net.js';
@@ -57,7 +57,7 @@ export function renderMenu(app) {
         tile('Store', 'Spend your tips', () => openStore()),
         tile('Trophies', `${p.unlockedAchievements.length} earned`, () => openTrophies()),
         tile('BertNet', 'Play alongside a friend', () => openHub()),
-        tile('Tutorial', 'Learn the moves', () => app.play(0)),
+        tile('Training', `${TRAINING.length} lessons`, () => app.show('training')),
         tile('Settings', 'Sound, data, name', () => openSettings(app)),
       ]),
       el('footer.menu__foot', [
@@ -98,6 +98,40 @@ export function renderLevelSelect(app) {
         el('button.btn.btn--ghost', { onclick: () => app.show('menu') }, 'Back'),
       ]),
       el('div.level-grid', cards),
+    ]),
+  ]);
+}
+
+/** Short lessons, one move each. Kept out of the campaign numbering. */
+export function renderTraining(app) {
+  const p = profile.get();
+
+  const cards = TRAINING.map((lesson, index) => {
+    const done = p.bestLevelTimes[String(lesson.id)] != null;
+    return el(`button.lesson${done ? '.is-done' : ''}`, {
+      onclick: () => { audio.click(); app.playTraining(lesson); },
+    }, [
+      el('span.lesson__num', String(index + 1)),
+      el('div.lesson__body', [
+        el('span.lesson__title', lesson.title),
+        el('span.lesson__teaches', lesson.teaches),
+      ]),
+      done ? el('span.lesson__done', '✓') : null,
+    ]);
+  });
+
+  return el('div.screen', [
+    el('div.panel', [
+      el('header.panel__head', [
+        el('h2.panel__title', 'Training'),
+        el('button.btn.btn--ghost', { onclick: () => app.show('menu') }, 'Back'),
+      ]),
+      el('div.panel__body', [
+        el('p.hub__note', 'Eight short lessons. Each one teaches a single move and '
+          + 'cannot be finished without it. Work through them in order the first time — '
+          + 'the later campaign levels assume all of it.'),
+        el('div.lessons', cards),
+      ]),
     ]),
   ]);
 }

@@ -12,7 +12,8 @@ import { installGlobals, makeCanvas, advance, resetClock } from './harness.mjs';
 installGlobals();
 
 const { Game } = await import('../js/engine/game.js');
-const { LEVELS } = await import('../js/data/levels.js');
+const { LEVELS, TRAINING } = await import('../js/data/levels.js');
+const ALL = [...LEVELS, ...TRAINING];
 const { isSolidType } = await import('../js/engine/level.js');
 
 /** Deterministic PRNG so a failure can be reproduced from its seed. */
@@ -220,7 +221,7 @@ test('standing still at the spawn is survivable in every level', () => {
   // The strongest form of the check: actually run each level for two seconds
   // with no input at all, and make sure nothing kills you.
   const deaths = [];
-  for (const raw of LEVELS) {
+  for (const raw of ALL) {
     resetClock();
     const canvas = makeCanvas({ record: false });
     let cause = null;

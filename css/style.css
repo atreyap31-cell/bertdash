@@ -1073,3 +1073,58 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
   padding-bottom: 6px;
 }
 .gear-tier__count { font-family: var(--mono); color: var(--text-dim); }
+
+/* Teaching prompt, shown while standing in a hint zone. */
+.hud__hint {
+  max-width: 460px;
+  padding: 10px 15px;
+  background: rgba(5, 6, 10, 0.88);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  border-left-width: 3px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text);
+  backdrop-filter: blur(8px);
+  animation: hint-in 0.18s ease;
+}
+.hud__hint b, .hud__hint kbd {
+  color: var(--cyan);
+  font-weight: 800;
+  font-style: normal;
+  font-family: inherit;
+}
+@keyframes hint-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* Training lessons */
+.panel__body { padding: 20px; overflow-y: auto; display: grid; gap: 14px; }
+.lessons { display: grid; gap: 7px; }
+.lesson {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 15px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+.lesson:hover { border-color: var(--cyan); transform: translateX(3px); }
+.lesson.is-done { border-color: rgba(6, 193, 103, 0.4); }
+.lesson__num {
+  width: 30px; height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.14);
+  font-weight: 900;
+  font-size: 0.82rem;
+}
+.lesson.is-done .lesson__num { background: var(--green); color: #04160c; }
+.lesson__body { flex: 1; display: grid; gap: 2px; }
+.lesson__title { font-weight: 800; font-size: 0.95rem; }
+.lesson__teaches { font-size: 0.74rem; color: var(--text-faint); }
+.lesson__done { color: var(--green); font-size: 1.1rem; }

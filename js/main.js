@@ -2,7 +2,7 @@
 // between them.
 
 import { el, toast, formatTime } from './ui/dom.js';
-import { renderMenu, renderLevelSelect, renderWorkshop, renderResult, openPause } from './ui/screens.js';
+import { renderMenu, renderLevelSelect, renderTraining, renderWorkshop, renderResult, openPause } from './ui/screens.js';
 import { Hud } from './ui/hud.js';
 import { InputDisplay } from './ui/inputs.js';
 import { Editor } from './ui/editor.js';
@@ -79,6 +79,7 @@ class App {
     let view;
     if (this.screen === 'menu') view = renderMenu(this);
     else if (this.screen === 'levels') view = renderLevelSelect(this);
+    else if (this.screen === 'training') view = renderTraining(this);
     else if (this.screen === 'workshop') view = renderWorkshop(this);
     else if (this.screen === 'result') view = renderResult(this, this.lastResult);
     else view = renderMenu(this);
@@ -129,6 +130,12 @@ class App {
     this.#launch({ level, index: null, isCustom: true });
   }
 
+  /** A training lesson: scored and saved, but outside the campaign numbering. */
+  playTraining(level) {
+    this.endRun();
+    this.#launch({ level, index: null, isCustom: false, isTraining: true });
+  }
+
   playNext() {
     if (!this.current || this.current.isCustom) return this.show('menu');
     this.play(this.current.index + 1);
@@ -148,7 +155,7 @@ class App {
 
     const p = profile.get();
     const skin = SKINS.find(s => s.id === p.equippedSkin) ?? SKINS[0];
-    const levelId = target.isCustom ? target.level.id : target.index;
+    const levelId = (target.isCustom || target.isTraining) ? target.level.id : target.index;
 
     profile.recordAttempt(levelId);
 
@@ -176,7 +183,9 @@ class App {
 
     const hud = new Hud({
       runTotalMs: this.run ? this.run.totalMs : null,
-      levelLabel: target.isCustom ? 'Custom' : `${target.index}/${CAMPAIGN_LENGTH}`,
+      levelLabel: target.isTraining ? 'Training'
+        : target.isCustom ? 'Custom'
+        : `${target.index}/${CAMPAIGN_LENGTH}`,
       levelTitle: target.level.title,
       parTime: game.level.parTime,
       best: profile.getBest(levelId),
@@ -229,7 +238,7 @@ class App {
     const target = this.current;
     const parTime = this.game.level.parTime;
     const stars = starsForTime(timeMs / 1000, parTime);
-    const levelId = target.isCustom ? target.level.id : target.index;
+    const levelId = (target.isCustom || target.isTraining) ? target.level.id : target.index;
     const loadout = profile.loadout();
 
     const { isNewBest, firstClear, clears } = profile.recordClear(levelId, timeMs);
@@ -238,14 +247,14 @@ class App {
     // Tips are a first-clear reward that scales with how far into the campaign
     // you are. Replays pay a small fraction, so grinding level 1 cannot fund
     // the store — beating your own time is the only reason to go back.
-    const difficulty = target.isCustom ? 6 : 4 + target.index * 1.6;
+    const difficulty = (target.isCustom || target.isTraining) ? 6 : 4 + target.index * 1.6;
     const base = stars * difficulty;
 
     let reward;
     let payoutNote;
-    if (target.isCustom) {
+    if (target.isCustom || target.isTraining) {
       reward = Math.round(base * 0.25);
-      payoutNote = 'Custom level';
+      payoutNote = target.isTraining ? 'Lesson complete' : 'Custom level';
     } else if (firstClear) {
       reward = Math.round(base);
       payoutNote = 'First delivery';
@@ -265,7 +274,7 @@ class App {
 
     if (target.isCustom) {
       profile.bump('customCleared');
-    } else {
+    } else if (!target.isTraining) {
       if (firstClear) profile.bump('levelsCleared');
       if (this.game.level.theme === 'vertical') profile.bump('verticalCleared');
     }
@@ -275,7 +284,7 @@ class App {
 
     // --- speedrun bookkeeping ----------------------------------------------
     let runSplit = null;
-    if (this.run && !target.isCustom) {
+    if (this.run && !target.isCustom && !target.isTraining) {
       this.run.totalMs += timeMs;
       this.run.levels++;
       const isLast = target.index >= LEVELS.length - 1;
@@ -306,7 +315,7 @@ class App {
       payoutNote,
       isNewBest,
       firstClear,
-      hasNext: !target.isCustom && target.index + 1 < LEVELS.length,
+      hasNext: !target.isCustom && !target.isTraining && target.index + 1 < LEVELS.length,
     };
 
     if (isNewBest && !firstClear) toast(`New best: ${formatTime(timeMs)}`, { icon: '★', tone: 'good' });

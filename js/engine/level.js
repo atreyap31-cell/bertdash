@@ -43,6 +43,12 @@ export function prepareLevel(source) {
     goalPos: { ...source.goalPos },
     foodPos: { ...(source.foodPos ?? { x: source.startPos.x + 40, y: source.startPos.y }) },
     physics: normalisePhysics(source.physics),
+    // Teaching prompts: zones that show a line of text while you stand in
+    // them. Used by the training levels, and to flag the moves a hard section
+    // expects in the campaign.
+    hints: (source.hints ?? []).map(h => ({
+      x: h.x, y: h.y, width: h.width ?? 400, height: h.height ?? 300, text: h.text,
+    })),
     platforms: (source.platforms ?? []).map(preparePlatform),
     vehicles: (source.vehicles ?? []).map(prepareVehicle),
     powerups: (source.powerups ?? []).map(preparePowerup),
