@@ -215,3 +215,23 @@ test('sliding into a low tunnel and standing up must not clip the ceiling', () =
     `player clipped ${worst.depth.toFixed(1)}px into the ceiling at frame ${worst.frame} `
     + `(height ${worst.height})`);
 });
+
+test('standing still at the spawn is survivable in every level', () => {
+  // The strongest form of the check: actually run each level for two seconds
+  // with no input at all, and make sure nothing kills you.
+  const deaths = [];
+  for (const raw of LEVELS) {
+    resetClock();
+    const canvas = makeCanvas({ record: false });
+    let cause = null;
+    const game = new Game(canvas, raw, {
+      skin: { color: '#06c167', textColor: '#fff' },
+      onWin: () => {}, onLose: reason => { cause ??= reason; }, onStats: () => {},
+    });
+    game.start();
+    advance(150);                      // ~2.5 seconds of doing nothing
+    game.destroy();
+    if (cause) deaths.push(`level ${raw.id} "${raw.title}" died doing nothing: ${cause}`);
+  }
+  assert.deepEqual(deaths, [], `\n${deaths.join('\n')}`);
+});

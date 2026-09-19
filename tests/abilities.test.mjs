@@ -1020,3 +1020,133 @@ test('shake settles quickly rather than rumbling on', () => {
   while (game.shake > 0 && frames < 120) { advance(1); frames++; }
   assert.ok(frames <= 15, `shake took ${frames} frames to settle`);
 });
+
+// --- gear effects ----------------------------------------------------------
+
+/** Boots a game with a specific loadout applied. */
+function bootGeared(loadout, level = fixture()) {
+  resetClock();
+  const canvas = makeCanvas({ record: false });
+  const events = { win: null, lose: null, stats: new Map() };
+  const game = new Game(canvas, level, {
+    skin: { color: '#06c167', textColor: '#fff' },
+    loadout,
+    onWin: r => { events.win = r; },
+    onLose: r => { events.lose = r; },
+    onStats: batch => batch.forEach((n, k) => events.stats.set(k, (events.stats.get(k) ?? 0) + n)),
+  });
+  game.start();
+  return { game, canvas, events };
+}
+
+test('Long Arms throws the bag harder', () => {
+  const plain = boot();
+  advance(40);
+  throwDir('right', 1);
+  const base = Math.abs(plain.game.food.vx);
+  plain.game.destroy();
+
+  const geared = bootGeared({ throwStrength: PHYSICS.throwStrength * 1.25 });
+  advance(40);
+  throwDir('right', 1);
+  assert.ok(Math.abs(geared.game.food.vx) > base * 1.15,
+    `geared throw ${Math.abs(geared.game.food.vx).toFixed(1)} should beat ${base.toFixed(1)}`);
+  geared.game.destroy();
+});
+
+test('Dust Brakes makes slides last longer', () => {
+  const { game } = bootGeared({ slideFrames: PHYSICS.slideFrames * 1.4 });
+  advance(40);
+  keys.down('KeyD');
+  advance(40);
+  tap('KeyS');
+  assert.ok(game.player.slideTimer > PHYSICS.slideFrames,
+    `slide should start longer than the base ${PHYSICS.slideFrames} frames`);
+  keys.up('KeyD');
+  game.destroy();
+});
+
+test('Coyote Kit widens the grace after leaving a ledge', () => {
+  const { game } = bootGeared({ coyoteFrames: PHYSICS.coyoteFrames + 4 });
+  advance(40);
+  assert.equal(game.player.grounded, true);
+  advance(1);
+  assert.equal(game.player.coyote, PHYSICS.coyoteFrames + 4,
+    'the extra grace frames should be in effect');
+  game.destroy();
+});
+
+test('Wall Boots kicks harder off a wall', () => {
+  const level = fixture({
+    platforms: [
+      { x: 0, y: FLOOR_Y, width: 3000, height: 200, type: 'static' },
+      { x: 400, y: 100, width: 40, height: 400, type: 'static' },
+    ],
+    startPos: { x: 300, y: 200 },
+  });
+
+  const reach = loadout => {
+    const { game } = loadout ? bootGeared(loadout, level) : boot(level);
+    keys.down('KeyD');
+    advance(24);
+    advance(4);
+    tap('Space');
+    const vy = game.player.vy;
+    keys.up('KeyD');
+    game.destroy();
+    return vy;
+  };
+
+  const base = reach(null);
+  const geared = reach({
+    wallJumpX: PHYSICS.wallJump.x * 1.15,
+    wallJumpY: PHYSICS.wallJump.y * 1.15,
+  });
+  assert.ok(geared < base, `geared kick (${geared.toFixed(1)}) should rise faster than base (${base.toFixed(1)})`);
+});
+
+test('Deep Pockets launches you higher off a bag catch', () => {
+  const launch = loadout => {
+    const ctx = loadout ? bootGeared(loadout) : boot();
+    advance(40);
+    keys.down('KeyD');
+    advance(30);
+    bagBounce(ctx.game, ctx.canvas);
+    const vy = ctx.game.player.vy;
+    keys.up('KeyD');
+    ctx.game.destroy();
+    return vy;
+  };
+
+  const base = launch(null);
+  const geared = launch({ catchBoost: PHYSICS.catchBoost * 1.15 });
+  assert.ok(geared < base,
+    `geared launch (${geared.toFixed(1)}) should be stronger than base (${base.toFixed(1)})`);
+});
+
+test('Cold Chain saves the bag from exactly one floor hit', () => {
+  const { game, events } = bootGeared({ floorSaves: 1 });
+  advance(40);
+  throwDir(['down', 'right'], 1);      // straight into the floor
+
+  let saved = false;
+  for (let i = 0; i < 60; i++) {
+    advance(1);
+    if (game.food.floorSavesLeft === 0) { saved = true; break; }
+  }
+  assert.ok(saved, 'the first floor hit should have been absorbed');
+  assert.equal(events.lose, null, 'and the bag still in play');
+
+  // The next one is not survivable.
+  for (let i = 0; i < 300 && !events.lose; i++) advance(1);
+  assert.equal(events.lose, 'DROPPED', 'the save is one-shot');
+});
+
+test('without Cold Chain the floor still breaks the bag immediately', () => {
+  const { game, events } = boot();
+  advance(40);
+  assert.equal(game.food.floorSavesLeft, 0, 'no saves by default');
+  throwDir(['down', 'right'], 1);
+  for (let i = 0; i < 200 && !events.lose; i++) advance(1);
+  assert.equal(events.lose, 'DROPPED');
+});

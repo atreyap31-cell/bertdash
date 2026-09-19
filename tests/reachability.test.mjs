@@ -191,3 +191,69 @@ test('no level asks for a rise that no move can clear', () => {
   }
   assert.deepEqual(problems, [], `\n${problems.slice(0, 12).join('\n')}`);
 });
+
+// --- spawn safety ----------------------------------------------------------
+
+const PLAYER_BOX = { width: 32, height: 48 };
+// Margin for the spawn settling and for landing drift.
+const SPAWN_GRACE = 6;
+
+function boxesOverlap(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x
+      && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+test('no level spawns the player on something lethal', () => {
+  const problems = [];
+  for (const raw of LEVELS) {
+    const level = prepareLevel(raw);
+    const box = {
+      x: level.startPos.x - SPAWN_GRACE,
+      y: level.startPos.y - SPAWN_GRACE,
+      width: PLAYER_BOX.width + SPAWN_GRACE * 2,
+      height: PLAYER_BOX.height + SPAWN_GRACE * 2,
+    };
+    for (const p of level.platforms) {
+      // Lasers cycle, so merely overlapping one means death within a second.
+      const lethal = p.type === 'spike' || p.type === 'laser'
+        || (p.type === 'door' && p.height > 24);
+      if (lethal && boxesOverlap(box, p)) {
+        problems.push(`level ${raw.id} "${raw.title}" spawns on a ${p.type} at (${p.x},${p.y})`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
+});
+
+test('no level drops the player onto something lethal', () => {
+  // Standing still at the spawn must not land you on spikes either.
+  const problems = [];
+  for (const raw of LEVELS) {
+    const level = prepareLevel(raw);
+    const feet = level.startPos.y + PLAYER_BOX.height;
+    const below = level.platforms.filter(p =>
+      isSolidType(p.type)
+      && level.startPos.x + PLAYER_BOX.width > p.x && level.startPos.x < p.x + p.width
+      && p.y >= feet - 4);
+
+    if (!below.length) {
+      problems.push(`level ${raw.id} "${raw.title}": nothing below the spawn to land on`);
+      continue;
+    }
+    const nearest = below.reduce((a, b) => (a.y <= b.y ? a : b));
+    const drop = nearest.y - feet;
+    if (drop > 400) {
+      problems.push(`level ${raw.id} "${raw.title}": spawns ${Math.round(drop)}px above any ground`);
+    }
+    const landing = {
+      x: level.startPos.x, y: nearest.y - PLAYER_BOX.height,
+      width: PLAYER_BOX.width, height: PLAYER_BOX.height,
+    };
+    for (const p of level.platforms) {
+      if ((p.type === 'spike' || p.type === 'laser') && boxesOverlap(landing, p)) {
+        problems.push(`level ${raw.id} "${raw.title}": lands on a ${p.type} at (${p.x},${p.y})`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
+});

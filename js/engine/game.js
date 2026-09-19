@@ -12,11 +12,22 @@ import { audio } from '../services/audio.js';
 const DEFAULT_LOADOUT = {
   airJumps: PHYSICS.airJumps,
   bagWallBounces: PHYSICS.bagWallBounces,
+  floorSaves: 0,
   catchRadius: PHYSICS.catchRadius,
+  catchBoost: PHYSICS.catchBoost,
   magnetRadius: PHYSICS.magnetCatchRadius,
   magnetDuration: PHYSICS.magnetFrames,
   shieldDuration: PHYSICS.shieldFrames,
   chargeFrames: PHYSICS.throwChargeFrames,
+  throwStrength: PHYSICS.throwStrength,
+  slideFrames: PHYSICS.slideFrames,
+  coyoteFrames: PHYSICS.coyoteFrames,
+  jumpBufferFrames: PHYSICS.jumpBufferFrames,
+  wallJumpX: PHYSICS.wallJump.x,
+  wallJumpY: PHYSICS.wallJump.y,
+  wallSlideSpeed: PHYSICS.wallSlideSpeed,
+  boostRecharge: PHYSICS.boostRecharge,
+  flowWindow: FLOW.window,
   moveSpeed: 1,
   jumpForce: 1,
   diveBounceMinSpeed: PHYSICS.diveBounceMinSpeed,
@@ -143,6 +154,7 @@ export class Game {
       catchCooldown: 0,
       magnetised: false,
       wallBouncesLeft: this.loadout.bagWallBounces,
+      floorSavesLeft: this.loadout.floorSaves,
     };
     this.camera = {
       x: clamp(start.x - VIEW_W / 2, 0, Math.max(0, this.level.width - VIEW_W)),
@@ -429,7 +441,7 @@ export class Game {
     if (this.#justPressed('boost') && vehicle
         && p.boost <= 0 && p.boostCharge <= 0) {
       p.boost = PHYSICS.boostFrames;
-      p.boostCharge = PHYSICS.boostRecharge;
+      p.boostCharge = this.loadout.boostRecharge;
       this.#bump('boosts');
       this.#addFlow('boost');
       audio.vehicle();
@@ -479,7 +491,7 @@ export class Game {
     if (this.#justPressed('slide') && p.grounded && !p.sliding
         && p.slideCooldown <= 0 && !vehicle) {
       p.sliding = true;
-      p.slideTimer = PHYSICS.slideFrames;
+      p.slideTimer = this.loadout.slideFrames;
       p.slideCooldown = PHYSICS.slideCooldown;
       const dir = steer !== 0 ? steer : (p.facingRight ? 1 : -1);
       const launch = PHYSICS.slideSpeed * phys.moveSpeedScale * buffSpeed;
@@ -495,7 +507,7 @@ export class Game {
     }
 
     // --- jump, in priority order: wall kick, long jump, ground, air ---
-    if (this.#justPressed('jump')) p.jumpBuffer = PHYSICS.jumpBufferFrames;
+    if (this.#justPressed('jump')) p.jumpBuffer = this.loadout.jumpBufferFrames;
 
     const jumpForce = (tuning?.jump ?? PHYSICS.jumpForce)
       * phys.jumpForceScale * buffJump * this.loadout.jumpForce;
@@ -504,8 +516,8 @@ export class Game {
       if ((p.wallSliding || p.wallStick > 0) && phys.wallSlideEnabled && !vehicle) {
         // Wall kick, which also refunds the air jump — a wall is a renewable
         // source of height.
-        p.vy = PHYSICS.wallJump.y * phys.jumpForceScale * buffJump;
-        p.vx = -p.wallDir * PHYSICS.wallJump.x;
+        p.vy = this.loadout.wallJumpY * phys.jumpForceScale * buffJump;
+        p.vx = -p.wallDir * this.loadout.wallJumpX;
         p.facingRight = p.wallDir < 0;
         p.wallSliding = false;
         p.wallStick = 0;
@@ -596,7 +608,7 @@ export class Game {
     const gravityScale = p.diving ? PHYSICS.diveGravityScale : 1;
     p.vy += PHYSICS.gravity * phys.gravityScale * gravityScale;
 
-    const terminal = p.wallSliding ? PHYSICS.wallSlideSpeed : PHYSICS.terminalVelocity;
+    const terminal = p.wallSliding ? this.loadout.wallSlideSpeed : PHYSICS.terminalVelocity;
     if (p.vy > terminal) p.vy = terminal;
 
     // The dive's speed window is short, but a dive off a height takes far
@@ -799,11 +811,11 @@ export class Game {
     }
 
     if (p.grounded) {
-      p.coyote = PHYSICS.coyoteFrames;
+      p.coyote = this.loadout.coyoteFrames;
       p.diving = false;
       p.wallSlideCredited = false;
     } else if (wasGrounded) {
-      p.coyote = PHYSICS.coyoteFrames;
+      p.coyote = this.loadout.coyoteFrames;
     }
 
     this.#updateWallSlide(p, solids);
@@ -842,7 +854,7 @@ export class Game {
       p.facingRight = dir > 0;
       // A short stick at the apex gives you time to aim the kick.
       if (!wasWallSliding) p.wallStick = PHYSICS.wallStickFrames;
-      if (p.vy > PHYSICS.wallSlideSpeed) p.vy = PHYSICS.wallSlideSpeed;
+      if (p.vy > this.loadout.wallSlideSpeed) p.vy = this.loadout.wallSlideSpeed;
       if (p.wallStick > 0 && p.vy > 0) p.vy = 0;
 
       if (!p.wallSlideCredited) {
@@ -927,7 +939,7 @@ export class Game {
     const speed = Math.hypot(p.vx, p.vy);
     const speedBonus = Math.min(
       PHYSICS.throwSpeedBonusMax, speed * PHYSICS.throwSpeedBonus);
-    return PHYSICS.throwStrength
+    return this.loadout.throwStrength
       * (1 + this.chargeRatio() * PHYSICS.throwChargeBonus)
       * (1 + speedBonus);
   }
@@ -981,7 +993,7 @@ export class Game {
         // The bag bounce. Catching it in mid-air launches you well above jump
         // height and hands the air jump back, so a throw is a way to travel.
         if (!p.grounded && p.airTime >= PHYSICS.catchBoostMinAir) {
-          p.vy = PHYSICS.catchBoost * this.level.physics.jumpForceScale * this.loadout.jumpForce;
+          p.vy = this.loadout.catchBoost * this.level.physics.jumpForceScale * this.loadout.jumpForce;
           p.vx *= PHYSICS.catchBoostForward;
           p.airJumps = this.loadout.airJumps;
           p.diving = false;
@@ -1021,7 +1033,23 @@ export class Game {
 
       // Floors and ceilings break it. Throwing the bag at the ground ends the
       // delivery — that is the risk that makes the throw a decision.
-      if (!sideways || f.wallBouncesLeft <= 0) { this.#kill('DROPPED'); return; }
+      if (!sideways) {
+        // Cold Chain absorbs exactly one of these per level.
+        if (f.floorSavesLeft > 0) {
+          f.floorSavesLeft--;
+          const hitTop = fromTop < fromBottom;
+          f.y = hitTop ? plat.y - f.size : plat.y + plat.height;
+          f.vy = (hitTop ? -1 : 1) * Math.abs(f.vy) * 0.45;
+          f.vx *= 0.7;
+          this.#addShake(PHYSICS.shake.bagGlance);
+          audio.catchFood();
+          this.#spawnParticles(f.x + f.size / 2, f.y + f.size / 2, 12, COLORS.buffShield);
+          return;
+        }
+        this.#kill('DROPPED');
+        return;
+      }
+      if (f.wallBouncesLeft <= 0) { this.#kill('DROPPED'); return; }
 
       // A wall only glances it. Most of the sideways speed is gone and some of
       // the fall speed with it, so the bag hangs by the wall long enough to
@@ -1298,7 +1326,7 @@ export class Game {
     const value = move === this.lastMove ? base * FLOW.repeatFalloff : base;
     this.lastMove = move;
     this.flow = Math.min(FLOW.max, this.flow + value);
-    this.flowTimer = FLOW.window;
+    this.flowTimer = this.loadout.flowWindow;
     this.flowEvents++;
     this.bestFlow = Math.max(this.bestFlow, this.flow);
     this.#beginRun();
@@ -1374,7 +1402,7 @@ export class Game {
       started: this.started,
       flow: this.flow,
       flowRatio: Math.min(1, this.flow / FLOW.max),
-      flowTimeLeft: this.flowTimer / FLOW.window,
+      flowTimeLeft: this.flowTimer / this.loadout.flowWindow,
       flowMultiplier: this.flowMultiplier(),
       bagWallBouncesLeft: this.food.airborne ? this.food.wallBouncesLeft : null,
       paused: this.paused,

@@ -39,3 +39,12 @@ Development scripts. Not part of the deployed site.
   ```bash
   node tools/camera-audit.mjs
   ```
+
+- **`spawn-audit.mjs`** — checks every level's spawn: not inside spikes, a
+  laser or a door, something to land on below it, and the spot it falls onto is
+  not itself lethal. Found STARBASE DELTA spawning the player directly on the
+  spike strip that runs down the middle of each tier.
+
+  ```bash
+  node tools/spawn-audit.mjs
+  ```

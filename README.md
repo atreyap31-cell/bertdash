@@ -83,6 +83,24 @@ one move is worth less than varying them, and the chain multiplies your tips at
 the end of the level — so the fastest route and the most stylish one are the
 same route. Throwing is worth the most, because it is the biggest risk.
 
+### The shop
+
+Tips buy **Gear** — 18 permanent upgrades across four groups, all of which
+change how the game plays — and **Skins**, which are cosmetic.
+
+| Group | What it touches |
+| --- | --- |
+| Handling | Catching, throwing, and how much punishment the bag takes |
+| Movement | Air jumps, slides, wall kicks, dives, the bag bounce |
+| Kit | How long shields and magnets last, vehicle boost recharge |
+| Payroll | Flow duration and the size of your cut |
+
+It is deliberately expensive. One full campaign clear is worth roughly 8,000
+tips played badly, 16,000 played reasonably, and 39,000 played well — against
+147,000 for every piece of gear. Star ratings and flow are worth about 4.75x
+more than grinding, and replays taper hard, so the way to afford things is to
+play more of the campaign better rather than to farm level 1.
+
 ### Speedrun mode
 
 Turn it on in Settings and **Start Shift** runs the whole campaign against one
@@ -116,7 +134,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-94 tests across five suites:
+104 tests across five suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it

@@ -1,7 +1,7 @@
 // Menu, level select, results, store, trophies, settings and the peer hub.
 
 import { el, modal, toast, confirmDialog, formatTime, formatMoney } from './dom.js';
-import { SKINS, GEAR, ACHIEVEMENTS, ACTIONS, keyName, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
+import { SKINS, GEAR, GEAR_TIERS, ACHIEVEMENTS, ACTIONS, keyName, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
 import { LEVELS, CAMPAIGN_LENGTH } from '../data/levels.js';
 import { profile } from '../services/profile.js';
 import { audio } from '../services/audio.js';
@@ -246,30 +246,43 @@ export function openStore() {
 
   const gearGrid = () => {
     const p = profile.get();
-    return el('div.store__grid', GEAR.map(item => {
-      const owned = p.ownedGear.includes(item.id);
-      const affordable = p.tips >= item.cost;
-      return el(`div.gear${owned ? '.is-owned' : ''}`, [
-        el('div.gear__icon', item.icon),
-        el('div.gear__body', [
-          el('h3.gear__name', item.name),
-          el('p.gear__desc', item.description),
+    // Eighteen items in one wall is unreadable; group them by what they do.
+    return el('div.gear-tiers', GEAR_TIERS.map(tier => {
+      const items = GEAR.filter(g => g.tier === tier);
+      const owned = items.filter(g => p.ownedGear.includes(g.id)).length;
+      return el('section.gear-tier', [
+        el('h4.gear-tier__title', [
+          tier,
+          el('span.gear-tier__count', `${owned}/${items.length}`),
         ]),
-        owned
-          ? el('span.gear__owned', 'Owned')
-          : el(`button.btn.btn--sm${affordable ? '.btn--primary' : '.btn--ghost'}`, {
-              disabled: !affordable,
-              title: affordable ? '' : `You need $${(item.cost - p.tips).toLocaleString()} more`,
-              onclick: () => {
-                if (profile.purchaseGear(item.id, item.cost)) {
-                  audio.pickup();
-                  toast(`Bought ${item.name}`, { icon: item.icon, tone: 'good' });
-                  refresh();
-                }
-              },
-            }, affordable ? `$${item.cost.toLocaleString()}` : `$${item.cost.toLocaleString()}`),
+        el('div.store__grid', items.map(item => gearCard(item, p))),
       ]);
     }));
+  };
+
+  const gearCard = (item, p) => {
+    const owned = p.ownedGear.includes(item.id);
+    const affordable = p.tips >= item.cost;
+    return el(`div.gear${owned ? '.is-owned' : ''}`, [
+      el('div.gear__icon', item.icon),
+      el('div.gear__body', [
+        el('h3.gear__name', item.name),
+        el('p.gear__desc', item.description),
+      ]),
+      owned
+        ? el('span.gear__owned', 'Owned')
+        : el(`button.btn.btn--sm${affordable ? '.btn--primary' : '.btn--ghost'}`, {
+            disabled: !affordable,
+            title: affordable ? '' : `You need $${(item.cost - p.tips).toLocaleString()} more`,
+            onclick: () => {
+              if (profile.purchaseGear(item.id, item.cost)) {
+                audio.pickup();
+                toast(`Bought ${item.name}`, { icon: item.icon, tone: 'good' });
+                refresh();
+              }
+            },
+          }, `$${item.cost.toLocaleString()}`),
+    ]);
   };
 
   const skinGrid = () => {
@@ -309,8 +322,9 @@ export function openStore() {
       tabs(),
       tab === 'gear'
         ? el('div', [
-            el('p.hub__note', 'Gear is permanent and changes how you play. '
-              + 'Skins are cosmetic.'),
+            el('p.hub__note', 'Gear is permanent and changes how you play. Skins are '
+              + 'cosmetic. Tips come from first clears and from flow, so the way to '
+              + 'afford this is to play more of the campaign well, not to replay level 1.'),
             gearGrid(),
           ])
         : skinGrid(),

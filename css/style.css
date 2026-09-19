@@ -1056,3 +1056,20 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
   font-size: 0.48rem; letter-spacing: 0.14em; text-transform: uppercase;
   color: rgba(148, 163, 184, 0.45);
 }
+
+/* Gear grouped by what it affects — eighteen items in one wall is unreadable. */
+.gear-tiers { display: grid; gap: 22px; }
+.gear-tier { display: grid; gap: 9px; }
+.gear-tier__title {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+.gear-tier__count { font-family: var(--mono); color: var(--text-dim); }

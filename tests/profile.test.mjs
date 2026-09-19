@@ -49,7 +49,9 @@ test('stat bumps unlock the matching achievement exactly once', () => {
 });
 
 test('purchases debit tips and cannot be repeated or overdrawn', () => {
-  const skin = SKINS.find(s => s.cost > 0 && s.cost < 400);
+  // The cheapest paid skin, whatever the prices happen to be.
+  const skin = SKINS.filter(s => s.cost > 0).sort((a, b) => a.cost - b.cost)[0];
+  profile.addTips(skin.cost);          // afford exactly one
   const startTips = profile.get().tips;
 
   assert.equal(profile.purchaseSkin(skin.id, skin.cost), true);

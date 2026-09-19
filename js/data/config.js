@@ -311,15 +311,15 @@ export const COLORS = {
 
 export const SKINS = [
   { id: 'base',     name: 'The Trainee',       cost: 0,     color: '#06C167', textColor: '#FFFFFF' },
-  { id: 'soggy',    name: 'Soggy Fries',       cost: 150,   color: '#d97706', textColor: '#fde047' },
-  { id: 'straw',    name: 'Missing Straw',     cost: 300,   color: '#ef4444', textColor: '#FFFFFF' },
-  { id: 'parked',   name: 'Double Parked',     cost: 600,   color: '#eab308', textColor: '#000000' },
-  { id: 'beggar',   name: '5-Star Beggar',     cost: 1000,  color: '#78350f', textColor: '#cd7f32' },
-  { id: 'surge',    name: 'Surge Pricing',     cost: 2000,  color: '#9333ea', textColor: '#e879f9' },
-  { id: 'address',  name: 'Wrong Address',     cost: 3500,  color: '#64748b', textColor: '#cbd5e1' },
-  { id: 'cold',     name: 'Cold Pizza',        cost: 5000,  color: '#3b82f6', textColor: '#93c5fd' },
-  { id: 'employee', name: 'Employee of Month', cost: 8000,  color: '#e2e8f0', textColor: '#0f172a' },
-  { id: 'amir',     name: 'AMIR',              cost: 25000, color: '#f59e0b', textColor: '#4c1d95' },
+  { id: 'soggy',    name: 'Soggy Fries',       cost: 600,   color: '#d97706', textColor: '#fde047' },
+  { id: 'straw',    name: 'Missing Straw',     cost: 1100,  color: '#ef4444', textColor: '#FFFFFF' },
+  { id: 'parked',   name: 'Double Parked',     cost: 2000,  color: '#eab308', textColor: '#000000' },
+  { id: 'beggar',   name: '5-Star Beggar',     cost: 3200,  color: '#78350f', textColor: '#cd7f32' },
+  { id: 'surge',    name: 'Surge Pricing',     cost: 6000,  color: '#9333ea', textColor: '#e879f9' },
+  { id: 'address',  name: 'Wrong Address',     cost: 10000, color: '#64748b', textColor: '#cbd5e1' },
+  { id: 'cold',     name: 'Cold Pizza',        cost: 15000, color: '#3b82f6', textColor: '#93c5fd' },
+  { id: 'employee', name: 'Employee of Month', cost: 24000, color: '#e2e8f0', textColor: '#0f172a' },
+  { id: 'amir',     name: 'AMIR',              cost: 75000, color: '#f59e0b', textColor: '#4c1d95' },
 ];
 
 /**
@@ -328,29 +328,70 @@ export const SKINS = [
  * resolves into the loadout below and is read by the engine.
  */
 export const GEAR = [
-  { id: 'second_wind',  name: 'Second Wind',    cost: 1200, icon: '↑',
-    description: 'A second air jump.', effect: { airJumps: 1 } },
-  { id: 'reinforced',   name: 'Reinforced Bag', cost: 900,  icon: '⬓',
-    description: 'The bag survives one more hit before the delivery is blown.',
-    effect: { bagBounces: 1 } },
-  { id: 'grip_gloves',  name: 'Grip Gloves',    cost: 700,  icon: '✋',
-    description: 'Catch the bag from 40% further away.', effect: { catchRadius: 1.4 } },
-  { id: 'quick_hands',  name: 'Quick Hands',    cost: 800,  icon: '◉',
-    description: 'Throws charge twice as fast.', effect: { chargeSpeed: 2 } },
-  { id: 'wide_magnet',  name: 'Wide Magnet',    cost: 1500, icon: '◎',
-    description: 'Magnets reach 60% further and last longer.',
+  // --- handling ------------------------------------------------------------
+  { id: 'grip_gloves',  name: 'Grip Gloves',    cost: 2200,  icon: '\u270B', tier: 'Handling',
+    description: 'Catch the bag from 40% further away.',
+    effect: { catchRadius: 1.4 } },
+  { id: 'quick_hands',  name: 'Quick Hands',    cost: 2600,  icon: '\u25C9', tier: 'Handling',
+    description: 'Throws charge twice as fast.',
+    effect: { chargeSpeed: 2 } },
+  { id: 'long_arms',    name: 'Long Arms',      cost: 4200,  icon: '\u27B6', tier: 'Handling',
+    description: 'Throw the bag 25% harder. Longer range on an air delivery.',
+    effect: { throwStrength: 1.25 } },
+  { id: 'reinforced',   name: 'Reinforced Bag', cost: 3400,  icon: '\u2B13', tier: 'Handling',
+    description: 'One more wall glance before the bag gives out. Floors still break it.',
+    effect: { bagWallBounces: 1 } },
+  { id: 'cold_chain',   name: 'Cold Chain',     cost: 26000, icon: '\u2744', tier: 'Handling',
+    description: 'The bag survives one hit on a floor per level. The only thing that does.',
+    effect: { floorSaves: 1 } },
+
+  // --- movement ------------------------------------------------------------
+  { id: 'coyote_kit',   name: 'Coyote Kit',     cost: 3000,  icon: '\u23F1', tier: 'Movement',
+    description: 'More grace after leaving a ledge, and a longer jump buffer.',
+    effect: { graceFrames: 4 } },
+  { id: 'second_wind',  name: 'Second Wind',    cost: 5200,  icon: '\u2191', tier: 'Movement',
+    description: 'A second air jump.',
+    effect: { airJumps: 1 } },
+  { id: 'dust_brakes',  name: 'Dust Brakes',    cost: 5800,  icon: '\u21E5', tier: 'Movement',
+    description: 'Slides run 40% longer, so long jumps carry further.',
+    effect: { slideFrames: 1.4 } },
+  { id: 'wall_boots',   name: 'Wall Boots',     cost: 6400,  icon: '\u23B7', tier: 'Movement',
+    description: 'Wall kicks are 15% stronger and you cling more slowly.',
+    effect: { wallJump: 1.15, wallSlide: 0.75 } },
+  { id: 'track_shoes',  name: 'Track Shoes',    cost: 7400,  icon: '\u00BB', tier: 'Movement',
+    description: '10% faster on foot.',
+    effect: { moveSpeed: 1.1 } },
+  { id: 'spring_heels', name: 'Spring Heels',   cost: 8600,  icon: '\u21C8', tier: 'Movement',
+    description: '8% more jump height, on every kind of jump.',
+    effect: { jumpForce: 1.08 } },
+  { id: 'crash_pads',   name: 'Crash Pads',     cost: 9200,  icon: '\u21BB', tier: 'Movement',
+    description: 'Dives rebound from much slower landings.',
+    effect: { diveBounceThreshold: 0.6 } },
+  { id: 'deep_pockets', name: 'Deep Pockets',   cost: 14000, icon: '\u2B06', tier: 'Movement',
+    description: 'Catching the bag in mid-air launches you 15% higher.',
+    effect: { catchBoost: 1.15 } },
+
+  // --- kit -----------------------------------------------------------------
+  { id: 'wide_magnet',  name: 'Wide Magnet',    cost: 5000,  icon: '\u25CE', tier: 'Kit',
+    description: 'Magnets reach 60% further and last half again as long.',
     effect: { magnetRadius: 1.6, magnetDuration: 1.5 } },
-  { id: 'insulated',    name: 'Insulated Box',  cost: 1800, icon: '◇',
-    description: 'Shields last twice as long.', effect: { shieldDuration: 2 } },
-  { id: 'track_shoes',  name: 'Track Shoes',    cost: 2200, icon: '»',
-    description: '10% faster on foot.', effect: { moveSpeed: 1.1 } },
-  { id: 'spring_heels', name: 'Spring Heels',   cost: 2600, icon: '⇈',
-    description: '8% more jump height.', effect: { jumpForce: 1.08 } },
-  { id: 'crash_pads',   name: 'Crash Pads',     cost: 3000, icon: '↻',
-    description: 'Dives rebound from slower landings.', effect: { diveBounceThreshold: 0.6 } },
-  { id: 'couriers_cut', name: "Courier's Cut",  cost: 4000, icon: '$',
-    description: '20% more tips from every delivery.', effect: { tips: 1.2 } },
+  { id: 'insulated',    name: 'Insulated Box',  cost: 6000,  icon: '\u25C7', tier: 'Kit',
+    description: 'Shields last twice as long.',
+    effect: { shieldDuration: 2 } },
+  { id: 'turbo_kit',    name: 'Turbo Kit',      cost: 7800,  icon: '\u226B', tier: 'Kit',
+    description: 'Vehicle boost recharges in a little over half the time.',
+    effect: { boostRecharge: 0.55 } },
+
+  // --- payroll -------------------------------------------------------------
+  { id: 'flow_state',   name: 'Flow State',     cost: 12000, icon: '\u223F', tier: 'Payroll',
+    description: 'Your flow chain takes 60% longer to lapse.',
+    effect: { flowWindow: 1.6 } },
+  { id: 'couriers_cut', name: "Courier's Cut",  cost: 18000, icon: '$',      tier: 'Payroll',
+    description: '25% more tips from every delivery.',
+    effect: { tips: 1.25 } },
 ];
+
+export const GEAR_TIERS = ['Handling', 'Movement', 'Kit', 'Payroll'];
 
 export const GEAR_BY_ID = Object.fromEntries(GEAR.map(g => [g.id, g]));
 
@@ -359,26 +400,55 @@ export function resolveLoadout(ownedIds = []) {
   const loadout = {
     airJumps: PHYSICS.airJumps,
     bagWallBounces: PHYSICS.bagWallBounces,
+    floorSaves: 0,
     catchRadius: PHYSICS.catchRadius,
+    catchBoost: PHYSICS.catchBoost,
     magnetRadius: PHYSICS.magnetCatchRadius,
     magnetDuration: PHYSICS.magnetFrames,
     shieldDuration: PHYSICS.shieldFrames,
     chargeFrames: PHYSICS.throwChargeFrames,
+    throwStrength: PHYSICS.throwStrength,
+    slideFrames: PHYSICS.slideFrames,
+    coyoteFrames: PHYSICS.coyoteFrames,
+    jumpBufferFrames: PHYSICS.jumpBufferFrames,
+    wallJumpX: PHYSICS.wallJump.x,
+    wallJumpY: PHYSICS.wallJump.y,
+    wallSlideSpeed: PHYSICS.wallSlideSpeed,
+    boostRecharge: PHYSICS.boostRecharge,
+    flowWindow: FLOW.window,
     moveSpeed: 1,
     jumpForce: 1,
     diveBounceMinSpeed: PHYSICS.diveBounceMinSpeed,
     tips: 1,
   };
+
   for (const id of ownedIds) {
     const effect = GEAR_BY_ID[id]?.effect;
     if (!effect) continue;
+    // Counts add; everything else multiplies, so two pieces that touch the
+    // same number stack rather than one silently overriding the other.
     if (effect.airJumps) loadout.airJumps += effect.airJumps;
     if (effect.bagWallBounces) loadout.bagWallBounces += effect.bagWallBounces;
+    if (effect.floorSaves) loadout.floorSaves += effect.floorSaves;
+    if (effect.graceFrames) {
+      loadout.coyoteFrames += effect.graceFrames;
+      loadout.jumpBufferFrames += effect.graceFrames;
+    }
     if (effect.catchRadius) loadout.catchRadius *= effect.catchRadius;
+    if (effect.catchBoost) loadout.catchBoost *= effect.catchBoost;
     if (effect.magnetRadius) loadout.magnetRadius *= effect.magnetRadius;
     if (effect.magnetDuration) loadout.magnetDuration *= effect.magnetDuration;
     if (effect.shieldDuration) loadout.shieldDuration *= effect.shieldDuration;
     if (effect.chargeSpeed) loadout.chargeFrames /= effect.chargeSpeed;
+    if (effect.throwStrength) loadout.throwStrength *= effect.throwStrength;
+    if (effect.slideFrames) loadout.slideFrames *= effect.slideFrames;
+    if (effect.wallJump) {
+      loadout.wallJumpX *= effect.wallJump;
+      loadout.wallJumpY *= effect.wallJump;
+    }
+    if (effect.wallSlide) loadout.wallSlideSpeed *= effect.wallSlide;
+    if (effect.boostRecharge) loadout.boostRecharge *= effect.boostRecharge;
+    if (effect.flowWindow) loadout.flowWindow *= effect.flowWindow;
     if (effect.moveSpeed) loadout.moveSpeed *= effect.moveSpeed;
     if (effect.jumpForce) loadout.jumpForce *= effect.jumpForce;
     if (effect.diveBounceThreshold) loadout.diveBounceMinSpeed *= effect.diveBounceThreshold;
@@ -429,6 +499,7 @@ export const ACHIEVEMENTS = [
   { id: 'speedrun_1',   title: 'Full Shift',     description: 'Finish a speedrun of the whole campaign', icon: '\u23F1', check: p => (p.stats.runsCompleted ?? 0) >= 1 },
   { id: 'gear_1',       title: 'Kitted Out',     description: 'Buy a piece of gear',           icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= 1 },
   { id: 'gear_5',       title: 'Well Equipped',  description: 'Own 5 pieces of gear',          icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= 5 },
+  { id: 'gear_10',      title: 'Kitted To Death', description: 'Own 10 pieces of gear',        icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= 10 },
   { id: 'gear_all',     title: 'Fully Loaded',   description: 'Own every piece of gear',       icon: '⚒', check: p => (p.ownedGear?.length ?? 0) >= GEAR.length },
   { id: 'flow_20',      title: 'In The Zone',    description: 'Reach a flow chain of 20',      icon: '∿', check: p => p.stats.bestFlow >= 20 },
   { id: 'flow_max',     title: 'Untouchable',    description: 'Max out the flow chain',        icon: '∿', check: p => p.stats.bestFlow >= FLOW.max },
