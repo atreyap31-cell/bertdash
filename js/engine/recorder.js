@@ -11,9 +11,15 @@
 /** Roughly four minutes at 60Hz. Long runs keep their most recent frames. */
 const MAX_FRAMES = 14000;
 
-/** Frames of run-up and follow-through around a highlight. */
+/**
+ * Frames of run-up and follow-through around a highlight.
+ *
+ * The follow-through has to outlast the slow-motion window or a clip snaps
+ * back to full speed and then ends almost immediately, which reads as the cut
+ * arriving early.
+ */
 export const LEAD_IN = 50;
-export const LEAD_OUT = 34;
+export const LEAD_OUT = 46;
 
 /** Labels for the moments worth cutting to. */
 const LABELS = {

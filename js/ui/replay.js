@@ -54,6 +54,7 @@ export class ReplayReel {
       replay: this.reel,
       shakeScale: reducedFlash ? 0.3 : 0.7,
       onReplayEnd: () => this.#end(),
+      onReplayCut: () => this.#cut(),
       onWin: () => {}, onLose: () => {}, onStats: () => {},
     });
 
@@ -118,6 +119,23 @@ export class ReplayReel {
     this.root.classList.toggle('is-slow', inSlowMo);
   }
 
+  /**
+   * Called by the engine the moment it moves to the next clip, before it
+   * places the camera.
+   *
+   * Resetting the zoom here rather than letting it ease means the new clip
+   * opens on its own framing instead of inheriting the last one's push-in, and
+   * it happens before the camera is positioned, so the snap uses the right
+   * view size.
+   */
+  #cut() {
+    this.game.replayZoom = SHOT.runUpZoom;
+    // A single dark frame reads as an edit rather than a glitch.
+    this.root.classList.add('is-cut');
+    clearTimeout(this.cutTimer);
+    this.cutTimer = setTimeout(() => this.root.classList.remove('is-cut'), 90);
+  }
+
   #end() {
     if (this.finished) return;
     this.finished = true;
@@ -126,6 +144,7 @@ export class ReplayReel {
   }
 
   destroy() {
+    clearTimeout(this.cutTimer);
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = null;
     removeEventListener('keydown', this.onKey);

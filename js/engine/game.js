@@ -30,6 +30,8 @@ export class Game {
    */
   constructor(canvas, levelSource, options = {}) {
     this.canvas = canvas;
+    this.renderScale = 1;
+    this.#sizeCanvas();
     this.ctx = canvas.getContext('2d');
     this.level = prepareLevel(levelSource);
     this.skin = options.skin ?? { color: COLORS.player, textColor: '#fff' };
@@ -46,6 +48,7 @@ export class Game {
     this.replaySpeed = 1;
     this.replayZoom = 1;
     this.onReplayEnd = options.onReplayEnd ?? (() => {});
+    this.onReplayCut = options.onReplayCut ?? null;
 
     // Optional run recorder, for the post-level highlight reel.
     this.recorder = options.recorder ?? null;
@@ -1480,28 +1483,69 @@ export class Game {
     if (!clip) { this.onReplayEnd(); return; }
 
     this.replayCursor += (deltaMs / SIM_STEP) * this.replaySpeed;
-    let frameIndex = Math.round(clip.from + this.replayCursor);
+    let cursor = clip.from + this.replayCursor;
+    let cut = false;
 
-    if (frameIndex > clip.to) {
+    if (cursor > clip.to) {
       reel.index++;
       this.replayCursor = 0;
       if (reel.index >= reel.clips.length) { this.onReplayEnd(); return; }
-      frameIndex = reel.clips[reel.index].from;
+      cursor = reel.clips[reel.index].from;
+      cut = true;
     }
 
-    const frame = reel.frames[Math.min(frameIndex, reel.frames.length - 1)];
-    if (frame) this.#applyFrame(frame);
+    // The recording is 60Hz but slow motion asks to see it at a fraction of
+    // that, so show the position between two recorded frames rather than the
+    // nearer one. Without this the same frame is held for three or four
+    // displayed frames and then jumps, which is what makes slow motion judder.
+    const last = reel.frames.length - 1;
+    const i = Math.min(Math.floor(cursor), last);
+    const a = reel.frames[i];
+    const b = reel.frames[Math.min(i + 1, last)];
+    if (a) this.#applyFrame(a, b, cursor - i);
 
     // Platforms, lasers and doors keep cycling so the world is alive behind
     // the action, and particles keep settling.
     this.worldTime += deltaMs * this.replaySpeed;
     this.#stepPlatforms();
     this.#stepParticles();
-    this.#frameCamera();
+
+    if (cut) {
+      // Let the reel reset its shot before the camera is placed, then cut
+      // rather than easing: sliding the camera across the level between two
+      // unrelated moments is a swoop, not an edit.
+      this.onReplayCut?.(reel.index);
+      this.snapCamera();
+    } else {
+      this.#frameCamera();
+    }
   }
 
-  /** Places the world from one recorded frame. */
-  #applyFrame(f) {
+  /**
+   * Places the world from a recorded frame, optionally `t` of the way towards
+   * the next one. Only continuous values are blended; flags and facing come
+   * from the frame actually being shown.
+   */
+  #applyFrame(f, next, t = 0) {
+    if (next && t > 0) {
+      // A gap this large is a teleport, not motion, so do not slide through it.
+      const jumped = Math.abs(next.x - f.x) > 200 || Math.abs(next.y - f.y) > 200;
+      if (!jumped) {
+        const mix = (from, to) => from + (to - from) * t;
+        f = {
+          ...f,
+          x: mix(f.x, next.x), y: mix(f.y, next.y),
+          vx: mix(f.vx, next.vx), vy: mix(f.vy, next.vy),
+          fx: mix(f.fx, next.fx), fy: mix(f.fy, next.fy),
+          t: mix(f.t, next.t), flow: mix(f.flow, next.flow),
+        };
+      }
+    }
+    this.#placeFrame(f);
+  }
+
+  /** Writes one frame's values straight into the world. */
+  #placeFrame(f) {
     const p = this.player;
     p.x = f.x; p.y = f.y; p.width = f.w; p.height = f.h;
     p.vx = f.vx; p.vy = f.vy;
@@ -1647,9 +1691,29 @@ export class Game {
 
   // --- rendering -----------------------------------------------------------
 
+  /**
+   * Matches the backing store to the display's real pixels.
+   *
+   * Everything downstream keeps drawing in a fixed 800x600 space; the base
+   * transform does the scaling. Capped at 3x because past that the extra
+   * pixels cost more than they show.
+   */
+  #sizeCanvas() {
+    const dpr = Math.min(Math.max(globalThis.devicePixelRatio || 1, 1), 3);
+    this.renderScale = dpr;
+    const w = Math.round(VIEW_W * dpr);
+    const h = Math.round(VIEW_H * dpr);
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
+  }
+
   #render() {
     const ctx = this.ctx;
     const cam = this.camera;
+
+    // Cheap, and it picks up a window dragged onto a different monitor.
+    this.#sizeCanvas();
+    ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
 
     ctx.save();
     if (this.shake > PHYSICS.shake.cutoff) {
@@ -1661,7 +1725,11 @@ export class Game {
     ctx.save();
     // Replays push in on the action; normal play is always 1:1.
     if (this.replayZoom !== 1) ctx.scale(this.replayZoom, this.replayZoom);
-    ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+    // Snap the camera to whole device pixels, not whole world units: under a
+    // push-in the two are not the same, and rounding the world position makes
+    // the view jump in zoom-sized steps.
+    const snap = this.renderScale * this.replayZoom;
+    ctx.translate(-Math.round(cam.x * snap) / snap, -Math.round(cam.y * snap) / snap);
 
     this.#drawGoal(ctx);
     this.#drawPlatforms(ctx);

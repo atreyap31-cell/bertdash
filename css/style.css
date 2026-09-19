@@ -1142,6 +1142,11 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 }
 .stage__canvas--reel { border-radius: 0; border: none; cursor: default; }
 
+/* One dark frame on a cut, so moving between two unrelated moments reads as an
+   edit rather than as the picture glitching. */
+.reel.is-cut .stage__canvas--reel { opacity: 0.25; }
+.stage__canvas--reel { transition: opacity 90ms ease-out; }
+
 /* Letterbox. They close in slightly during slow motion. */
 .reel__bar {
   position: absolute;

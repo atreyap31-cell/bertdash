@@ -39,6 +39,20 @@ function boot(level = fixture(), options = {}) {
   return { game, canvas, recorder, events };
 }
 
+/**
+ * Jumps, then jumps again in mid-air. A plain ground jump is deliberately not
+ * worth cutting to, so an air jump is the cheapest move that marks a highlight.
+ */
+function airJump() {
+  keys.down('Space');
+  advance(8);
+  keys.up('Space');
+  advance(6);
+  keys.down('Space');
+  advance(2);
+  keys.up('Space');
+}
+
 test('a run is recorded frame by frame', () => {
   const { game, recorder } = boot();
   advance(90);
@@ -193,4 +207,127 @@ test('a very long run keeps its most recent frames', () => {
   assert.ok(recorder.frames.length <= 14000, 'the buffer should be capped');
   assert.ok(recorder.dropped > 0, 'and the overflow counted');
   game.destroy();
+});
+
+
+// --- smoothness ------------------------------------------------------------
+// Slow motion used to round the frame index, so the same recorded position was
+// shown three or four times and then jumped. These pin that it interpolates.
+
+/** Records a short run and returns a reel plus a fresh playback game. */
+function playback(options = {}) {
+  const { recorder } = boot();
+  keys.down('KeyD');
+  advance(200);
+  keys.up('KeyD');
+  const reel = recorder.build();
+  assert.ok(reel, 'the run should produce a reel');
+
+  resetClock();
+  const game = new Game(makeCanvas({ record: false }), fixture(), {
+    skin: { color: '#06c167', textColor: '#fff' },
+    replay: { ...reel, index: 0 },
+    onReplayEnd: () => {}, onWin: () => {}, onLose: () => {}, onStats: () => {},
+    ...options,
+  });
+  game.start();
+  return { game, reel };
+}
+
+test('slow motion moves a little every frame instead of holding and jumping', () => {
+  const { game } = playback();
+  game.replaySpeed = 0.28;
+
+  const xs = [];
+  for (let i = 0; i < 40; i++) { advance(1); xs.push(game.player.x); }
+  game.destroy();
+
+  const steps = xs.slice(1).map((x, i) => Math.abs(x - xs[i]));
+  const moving = steps.filter(d => d > 1e-9);
+  assert.ok(moving.length > steps.length * 0.9,
+    `slow motion should advance nearly every frame, only ${moving.length}/${steps.length} did`);
+
+  // Rounding produced a run of identical frames and then one step four times
+  // the size. Interpolating should keep every step about the same size.
+  const largest = Math.max(...steps);
+  const typical = steps.reduce((a, b) => a + b, 0) / steps.length;
+  assert.ok(largest < typical * 2.5,
+    `no frame should lurch: largest step ${largest.toFixed(3)} vs typical ${typical.toFixed(3)}`);
+});
+
+test('playing at full speed still lands exactly on the recorded frames', () => {
+  const { game, reel } = playback();
+  game.replaySpeed = 1;
+  const clip = reel.clips[0];
+  for (let i = 1; i <= 12; i++) {
+    advance(1);
+    const expected = reel.frames[clip.from + i];
+    if (!expected) break;
+    assert.ok(Math.abs(game.player.x - expected.x) < 1e-6,
+      `frame ${i} should be exact, got ${game.player.x} vs ${expected.x}`);
+  }
+  game.destroy();
+});
+
+test('a cut jumps the camera rather than sliding it across the level', () => {
+  const { recorder } = boot();
+  // Two moments far apart, so easing between them would be a long swoop.
+  keys.down('KeyD');
+  advance(60);
+  airJump();
+  advance(220);
+  airJump();
+  advance(140);
+  keys.up('KeyD');
+  const reel = recorder.build();
+  assert.ok(reel && reel.clips.length >= 2, 'need at least two clips to cut between');
+
+  resetClock();
+  let cuts = 0;
+  const game = new Game(makeCanvas({ record: false }), fixture(), {
+    skin: { color: '#06c167', textColor: '#fff' },
+    replay: { ...reel, index: 0 },
+    onReplayCut: () => { cuts++; },
+    onReplayEnd: () => {}, onWin: () => {}, onLose: () => {}, onStats: () => {},
+  });
+  game.start();
+
+  let index = 0;
+  let easedAcrossACut = false;
+  for (let i = 0; i < 3000 && game.replay.index < reel.clips.length; i++) {
+    advance(1);
+    if (game.replay.index !== index) {
+      index = game.replay.index;
+      // Straight after a cut the camera must already be framing the new
+      // moment, not still travelling towards it.
+      const target = game.player.x + game.player.width / 2 - 400;
+      if (Math.abs(game.camera.x - Math.max(0, target)) > 40) easedAcrossACut = true;
+    }
+  }
+  game.destroy();
+
+  assert.ok(cuts >= 1, 'the reel should have cut at least once');
+  assert.ok(!easedAcrossACut, 'the camera should be in place the frame a cut happens');
+});
+
+test('the canvas is drawn at the display density, not a fixed 800x600', () => {
+  const original = globalThis.devicePixelRatio;
+  try {
+    globalThis.devicePixelRatio = 2;
+    const { game, canvas } = boot();
+    advance(1);
+    assert.equal(canvas.width, 1600, 'the backing store should follow the pixel ratio');
+    assert.equal(canvas.height, 1200);
+    assert.equal(game.renderScale, 2);
+    game.destroy();
+
+    // Absurd ratios are capped rather than allocating an enormous buffer.
+    globalThis.devicePixelRatio = 8;
+    const huge = boot();
+    advance(1);
+    assert.equal(huge.game.renderScale, 3);
+    huge.game.destroy();
+  } finally {
+    globalThis.devicePixelRatio = original;
+  }
 });

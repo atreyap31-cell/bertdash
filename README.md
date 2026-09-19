@@ -136,6 +136,21 @@ It records state rather than inputs. Replaying inputs would mean
 re-simulating, which desyncs the moment a physics constant changes; a state
 track always plays back exactly what happened.
 
+Slow motion interpolates between recorded frames rather than picking the
+nearest one. The recording is 60Hz but slow motion asks to see it at a fraction
+of that, so showing the nearer frame holds the same position for three or four
+displayed frames and then jumps — which is what makes slow motion judder. Cuts
+jump the camera rather than easing it, because easing between two moments that
+are half a level apart is a swoop, not an edit.
+
+### Rendering
+
+The canvas backing store is sized to the display's real pixels, capped at 3x.
+Drawing still happens in a fixed 800x600 space and the base transform does the
+scaling, so nothing downstream has to know about it. A replay's push-in makes
+the difference most obvious, but it is the difference between a soft picture
+and a sharp one during normal play too.
+
 ### Speedrun mode
 
 Turn it on in Settings and **Start Shift** runs the whole campaign against one
@@ -169,7 +184,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-127 tests across six suites:
+131 tests across six suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it

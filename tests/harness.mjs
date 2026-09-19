@@ -37,6 +37,7 @@ function makeContext() {
     font: '', textAlign: '', textBaseline: '', shadowColor: '', shadowBlur: 0,
     save: record('save'), restore: record('restore'),
     translate: record('translate'), rotate: record('rotate'), scale: record('scale'),
+    setTransform: record('setTransform'),
     fillRect: record('fillRect'), strokeRect: record('strokeRect'), clearRect: record('clearRect'),
     beginPath: record('beginPath'), closePath: record('closePath'),
     moveTo: record('moveTo'), lineTo: record('lineTo'), arc: record('arc'), rect: record('rect'),
@@ -83,7 +84,7 @@ function makeNullContext() {
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
   };
   for (const name of [
-    'save', 'restore', 'translate', 'rotate', 'scale',
+    'save', 'restore', 'translate', 'rotate', 'scale', 'setTransform',
     'fillRect', 'strokeRect', 'clearRect', 'beginPath', 'closePath',
     'moveTo', 'lineTo', 'arc', 'rect', 'fill', 'stroke', 'clip',
     'fillText', 'setLineDash',
