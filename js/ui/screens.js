@@ -280,9 +280,11 @@ export function openStore() {
 
   const gearGrid = () => {
     const p = profile.get();
-    // Eighteen items in one wall is unreadable; group them by what they do.
+    // Two dozen items in one wall is unreadable; group them by what they do,
+    // cheapest first inside each group so a tier reads as a progression rather
+    // than in whatever order the catalogue happens to list them.
     return el('div.gear-tiers', GEAR_TIERS.map(tier => {
-      const items = GEAR.filter(g => g.tier === tier);
+      const items = GEAR.filter(g => g.tier === tier).sort((a, b) => a.cost - b.cost);
       const owned = items.filter(g => p.ownedGear.includes(g.id)).length;
       return el('section.gear-tier', [
         el('h4.gear-tier__title', [

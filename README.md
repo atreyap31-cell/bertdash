@@ -92,21 +92,35 @@ same route. Throwing is worth the most, because it is the biggest risk.
 
 ### The shop
 
-Tips buy **Gear** — 19 permanent upgrades across four groups, all of which
+Tips buy **Gear** — 26 permanent upgrades across four groups, all of which
 change how the game plays — and **Skins**, which are cosmetic.
 
 | Group | What it touches |
 | --- | --- |
-| Handling | Catching, throwing, Bert's reach, and how much punishment the bag takes |
-| Movement | Air jumps, slides, wall kicks, dives, the bag bounce |
+| Handling | Catching, throwing, Bert's reach, how fast the bag falls, and how much punishment it takes |
+| Movement | Air jumps, slides, wall kicks, dives, fall speed, the bag bounce |
 | Kit | How long shields and magnets last, vehicle boost recharge |
-| Payroll | Flow duration and the size of your cut |
+| Payroll | Flow duration, the flow ceiling, and the size of your cut |
 
 It is deliberately expensive. One full campaign clear is worth roughly 8,000
 tips played badly, 16,000 played reasonably, and 39,000 played well — against
-147,000 for every piece of gear. Star ratings and flow are worth about 4.75x
+240,000 for every piece of gear. Star ratings and flow are worth about 4.75x
 more than grinding, and replays taper hard, so the way to afford things is to
 play more of the campaign better rather than to farm level 1.
+
+### Reading the bag
+
+While the bag is out of your hands the edge of the screen tells you how it is
+going: red while it is loose, green the moment it is on course to come back to
+you, and green again for a beat after a catch. The engine works this out by
+running the bag's arc forward and asking whether it passes close enough for you
+to get to it before it hits something — so the glow is a real prediction, not
+just "is the bag in the air".
+
+It goes red the instant a throw leaves your hands, so a bad one is obvious
+before the bag has travelled. Anyone who has turned on reduced flashing, or
+asked their system for reduced motion, gets a dimmer, steady version instead of
+the pulse.
 
 ### The highlight reel
 
@@ -155,7 +169,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-96 tests across six suites:
+127 tests across six suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
@@ -197,7 +211,7 @@ js/
     screens.js        menu, level select, store, trophies, results
     hud.js            in-game HUD
     editor.js         level editor
-tests/                node --test suites
+tests/                node:test suites
 ```
 
 ## The editor

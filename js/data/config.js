@@ -344,6 +344,12 @@ export const GEAR = [
   { id: 'bulls_eye',    name: "Bert's Reach",   cost: 9000,  icon: '\u25CE', tier: 'Handling',
     description: 'Bert catches from 70% further out, so an air delivery is far more forgiving.',
     effect: { goalCatchRadius: 1.7 } },
+  { id: 'spotter',      name: "Spotter's Monocle", cost: 6800, icon: '\u25CB', tier: 'Handling',
+    description: 'Marks the exact spot a loose bag will come down — green if you can still get there.',
+    effect: { landingMarker: true } },
+  { id: 'air_brake',    name: 'Air Brake',      cost: 11000, icon: '\u2602', tier: 'Handling',
+    description: 'The bag falls 25% slower, so there is far more time to chase it down.',
+    effect: { foodGravity: 0.75 } },
   { id: 'cold_chain',   name: 'Cold Chain',     cost: 26000, icon: '\u2744', tier: 'Handling',
     description: 'The bag survives one hit on a floor per level. The only thing that does.',
     effect: { floorSaves: 1 } },
@@ -370,6 +376,18 @@ export const GEAR = [
   { id: 'crash_pads',   name: 'Crash Pads',     cost: 9200,  icon: '\u21BB', tier: 'Movement',
     description: 'Dives rebound from much slower landings.',
     effect: { diveBounceThreshold: 0.6 } },
+  { id: 'drag_chute',   name: 'Drag Chute',     cost: 6600,  icon: '\u2193', tier: 'Movement',
+    description: 'You fall 20% slower at top speed, so a long drop stays steerable.',
+    effect: { terminalVelocity: 0.8 } },
+  { id: 'kick_plate',   name: 'Kick Plate',     cost: 10500, icon: '\u21AF', tier: 'Movement',
+    description: 'Dive rebounds throw you 20% higher.',
+    effect: { diveBounce: 1.2 } },
+  { id: 'slipstream',   name: 'Slipstream Vest', cost: 12500, icon: '\u2248', tier: 'Movement',
+    description: 'Once the bag leaves your hands you run 12% faster still.',
+    effect: { emptyHandBonus: 1.12 } },
+  { id: 'jet_soles',    name: 'Jet Soles',      cost: 13000, icon: '\u00BB', tier: 'Movement',
+    description: 'Dives travel 12% faster, so the bag is easier to catch up with.',
+    effect: { diveSpeed: 1.12 } },
   { id: 'deep_pockets', name: 'Deep Pockets',   cost: 14000, icon: '\u2B06', tier: 'Movement',
     description: 'Catching the bag in mid-air launches you 15% higher.',
     effect: { catchBoost: 1.15 } },
@@ -389,6 +407,9 @@ export const GEAR = [
   { id: 'flow_state',   name: 'Flow State',     cost: 12000, icon: '\u223F', tier: 'Payroll',
     description: 'Your flow chain takes 60% longer to lapse.',
     effect: { flowWindow: 1.6 } },
+  { id: 'overtime',     name: 'Overtime',       cost: 24000, icon: '\u223F', tier: 'Payroll',
+    description: 'A maxed flow chain is worth 4x instead of 3x. Only pays if you keep it alive.',
+    effect: { flowMaxMultiplier: 1.5 } },
   { id: 'couriers_cut', name: "Courier's Cut",  cost: 18000, icon: '$',      tier: 'Payroll',
     description: '25% more tips from every delivery.',
     effect: { tips: 1.25 } },
@@ -422,6 +443,13 @@ export function resolveLoadout(ownedIds = []) {
     flowWindow: FLOW.window,
     moveSpeed: 1,
     jumpForce: 1,
+    foodGravity: 1,
+    terminalVelocity: PHYSICS.terminalVelocity,
+    emptyHandBonus: PHYSICS.emptyHandBonus,
+    diveSpeed: PHYSICS.diveSpeed,
+    diveBounce: PHYSICS.diveBounce,
+    flowMaxMultiplier: FLOW.maxMultiplier,
+    landingMarker: false,
     diveBounceMinSpeed: PHYSICS.diveBounceMinSpeed,
     tips: 1,
   };
@@ -457,6 +485,17 @@ export function resolveLoadout(ownedIds = []) {
     if (effect.moveSpeed) loadout.moveSpeed *= effect.moveSpeed;
     if (effect.jumpForce) loadout.jumpForce *= effect.jumpForce;
     if (effect.diveBounceThreshold) loadout.diveBounceMinSpeed *= effect.diveBounceThreshold;
+    if (effect.foodGravity) loadout.foodGravity *= effect.foodGravity;
+    if (effect.terminalVelocity) loadout.terminalVelocity *= effect.terminalVelocity;
+    if (effect.emptyHandBonus) loadout.emptyHandBonus *= effect.emptyHandBonus;
+    if (effect.diveSpeed) loadout.diveSpeed *= effect.diveSpeed;
+    if (effect.diveBounce) loadout.diveBounce *= effect.diveBounce;
+    // The cap is a multiplier over 1x, so scaling the headroom rather than the
+    // whole number keeps "no flow at all" worth exactly 1x.
+    if (effect.flowMaxMultiplier) {
+      loadout.flowMaxMultiplier = 1 + (loadout.flowMaxMultiplier - 1) * effect.flowMaxMultiplier;
+    }
+    if (effect.landingMarker) loadout.landingMarker = true;
     if (effect.tips) loadout.tips *= effect.tips;
   }
   return loadout;

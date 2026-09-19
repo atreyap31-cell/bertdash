@@ -1223,3 +1223,202 @@ test('the aim arrow and the predicted arc agree', () => {
     'the arrow and the dotted arc should point the same way');
   game.destroy();
 });
+
+
+// --- the bag glow ----------------------------------------------------------
+// The engine decides whether a loose bag is coming back to you or is gone; the
+// HUD only paints what it is told. These pin the decision, not the paint.
+
+/** Runs until the outlook settles on something other than the bag being held. */
+function outlookAfter(game, frames) {
+  advance(frames);
+  return game.getHudState().bag;
+}
+
+test('a bag in hand shows no glow at all', () => {
+  const { game } = boot();
+  advance(20);
+  assert.equal(game.getHudState().bag.state, 'none');
+  assert.equal(game.getHudState().bag.urgency, 0);
+  game.destroy();
+});
+
+test('a bag thrown down at the floor reads as lost', () => {
+  const { game } = boot();
+  advance(30);
+  throwDir('down', 40);
+  const bag = outlookAfter(game, 6);
+  assert.equal(bag.state, 'bad', 'a bag thrown at the ground is not coming back');
+  assert.ok(bag.urgency > 0, 'a doomed bag should glow');
+  game.destroy();
+});
+
+test('a bag tossed straight up reads as catchable', () => {
+  const { game } = boot();
+  advance(30);
+  // Straight up while running: the bag keeps the player's speed, so it comes
+  // back down onto them. This is the bag bounce, and it should read green.
+  throwDir('up', 40);
+  const bag = outlookAfter(game, 6);
+  assert.equal(bag.state, 'good', 'a bag thrown up over your own head is catchable');
+  game.destroy();
+});
+
+test('the glow turns green the moment the bag is caught', () => {
+  const { game } = boot();
+  keys.down('KeyD');
+  advance(30);
+  throwDir('up', 30);
+  // Chase it down. The catch itself should flip the glow green and hold it.
+  let caught = false;
+  for (let i = 0; i < 180 && !caught; i++) {
+    advance(1);
+    if (game.player.hasFood) caught = true;
+  }
+  keys.up('KeyD');
+  assert.ok(caught, 'the bag should have been caught');
+  const bag = game.getHudState().bag;
+  assert.equal(bag.state, 'good');
+  assert.ok(bag.urgency > 0.5, 'a fresh catch should glow brightly');
+  game.destroy();
+});
+
+test('the warning gets stronger as the bag nears the ground', () => {
+  const { game } = boot();
+  advance(30);
+  throwDir('right', 40);
+  const early = game.getHudState().bag;
+  assert.equal(early.state, 'bad', 'a bag flung away from you is not coming back');
+
+  // Run it almost to the floor and sample again.
+  let late = early;
+  for (let i = 0; i < 200 && game.food.airborne; i++) {
+    advance(1);
+    const now = game.getHudState().bag;
+    if (now.state === 'bad') late = now;
+  }
+  assert.ok(late.urgency > early.urgency,
+    `urgency should climb from ${early.urgency.toFixed(2)} towards impact, ended at ${late.urgency.toFixed(2)}`);
+  game.destroy();
+});
+
+// --- the new gear ----------------------------------------------------------
+
+test('Air Brake keeps the bag in the air longer', () => {
+  const fall = (foodGravity) => {
+    const { game } = bootGeared({ foodGravity });
+    advance(30);
+    throwDir('up', 30);
+    let frames = 0;
+    while (game.food.airborne && frames < 400) { advance(1); frames++; }
+    game.destroy();
+    return frames;
+  };
+  const plain = fall(1);
+  const braked = fall(0.75);
+  assert.ok(braked > plain,
+    `a braked bag should hang longer than ${plain} frames, got ${braked}`);
+});
+
+test('Drag Chute lowers the speed you fall at', () => {
+  const drop = (terminalVelocity) => {
+    // A tall shaft, so both runs are still falling when the speed is read.
+    const { game } = bootGeared({ terminalVelocity }, fixture({
+      height: 2200, startPos: { x: 200, y: 60 }, foodPos: { x: 240, y: 60 },
+      platforms: [{ x: 0, y: 2000, width: 3000, height: 200, type: 'static' }],
+    }));
+    advance(60);
+    const vy = game.player.vy;
+    game.destroy();
+    return vy;
+  };
+  assert.ok(drop(PHYSICS.terminalVelocity * 0.8) < drop(PHYSICS.terminalVelocity),
+    'the chute should cap fall speed lower');
+});
+
+test('Kick Plate rebounds a dive higher', () => {
+  const rebound = (diveBounce) => {
+    const { game } = bootGeared({ diveBounce });
+    advance(30);
+    jump(12);
+    advance(6);
+    keys.down('ArrowRight');
+    tap('KeyE');
+    keys.up('ArrowRight');
+    let best = 0;
+    for (let i = 0; i < 90; i++) {
+      advance(1);
+      if (game.player.vy < best) best = game.player.vy;
+    }
+    game.destroy();
+    return best;
+  };
+  const plain = rebound(PHYSICS.diveBounce);
+  const plated = rebound(PHYSICS.diveBounce * 1.2);
+  assert.ok(plated < plain,
+    `a plated rebound (${plated.toFixed(1)}) should beat ${plain.toFixed(1)}`);
+});
+
+test('Slipstream only helps once the bag has left your hands', () => {
+  const { game } = bootGeared({ emptyHandBonus: PHYSICS.emptyHandBonus * 1.12 });
+  keys.down('KeyD');
+  advance(60);
+  const carrying = Math.abs(game.player.vx);
+  throwDir('right', 1);
+  advance(40);
+  const freed = Math.abs(game.player.vx);
+  keys.up('KeyD');
+  game.destroy();
+  assert.ok(freed > carrying,
+    `empty-handed (${freed.toFixed(1)}) should beat carrying (${carrying.toFixed(1)})`);
+});
+
+test('Jet Soles make a dive travel faster', () => {
+  const speed = (diveSpeed) => {
+    const { game } = bootGeared({ diveSpeed });
+    advance(30);
+    keys.down('ArrowRight');
+    tap('KeyE');
+    keys.up('ArrowRight');
+    advance(2);
+    const vx = Math.abs(game.player.vx);
+    game.destroy();
+    return vx;
+  };
+  assert.ok(speed(PHYSICS.diveSpeed * 1.12) > speed(PHYSICS.diveSpeed),
+    'jetted dives should be quicker');
+});
+
+test('Overtime raises the flow ceiling but not the floor', () => {
+  const plain = bootGeared({ flowMaxMultiplier: 3 });
+  assert.equal(plain.game.flowMultiplier(), 1, 'no flow is worth 1x either way');
+  plain.game.bestFlow = 999;
+  assert.ok(Math.abs(plain.game.flowMultiplier() - 3) < 1e-9);
+  plain.game.destroy();
+
+  const geared = bootGeared({ flowMaxMultiplier: 4 });
+  assert.equal(geared.game.flowMultiplier(), 1);
+  geared.game.bestFlow = 999;
+  assert.ok(Math.abs(geared.game.flowMultiplier() - 4) < 1e-9);
+  geared.game.destroy();
+});
+
+test('every gear effect is understood by the loadout resolver', async () => {
+  const { GEAR, resolveLoadout } = await import('../js/data/config.js');
+  const base = resolveLoadout([]);
+  for (const piece of GEAR) {
+    const with_ = resolveLoadout([piece.id]);
+    const changed = Object.keys(base).some(k => base[k] !== with_[k]);
+    assert.ok(changed, `${piece.id} has an effect the resolver silently ignores`);
+  }
+});
+
+test('the ungeared default matches a resolved empty loadout', async () => {
+  const { resolveLoadout } = await import('../js/data/config.js');
+  const { game } = boot();
+  const resolved = resolveLoadout([]);
+  for (const key of Object.keys(resolved)) {
+    assert.equal(game.loadout[key], resolved[key], `loadout.${key} drifted`);
+  }
+  game.destroy();
+});

@@ -4,36 +4,17 @@
 // matter what the display refresh rate is, so a 144Hz monitor no longer makes
 // the player move 2.4x faster than a 60Hz one.
 
-import { PHYSICS, COLORS, FLOW, POWERUP_BY_ID, DEFAULT_BINDINGS, AIM_ACTIONS, SIM_STEP, STEP_EPSILON, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
+import { PHYSICS, resolveLoadout, COLORS, FLOW, POWERUP_BY_ID, DEFAULT_BINDINGS, AIM_ACTIONS, SIM_STEP, STEP_EPSILON, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
 import { prepareLevel, isSolidType, clamp } from './level.js';
 import { audio } from '../services/audio.js';
 
-/** Used when no gear is supplied, e.g. in tests. */
-const DEFAULT_LOADOUT = {
-  airJumps: PHYSICS.airJumps,
-  bagWallBounces: PHYSICS.bagWallBounces,
-  floorSaves: 0,
-  catchRadius: PHYSICS.catchRadius,
-  goalCatchRadius: PHYSICS.goalCatchRadius,
-  catchBoost: PHYSICS.catchBoost,
-  magnetRadius: PHYSICS.magnetCatchRadius,
-  magnetDuration: PHYSICS.magnetFrames,
-  shieldDuration: PHYSICS.shieldFrames,
-  chargeFrames: PHYSICS.throwChargeFrames,
-  throwStrength: PHYSICS.throwStrength,
-  slideFrames: PHYSICS.slideFrames,
-  coyoteFrames: PHYSICS.coyoteFrames,
-  jumpBufferFrames: PHYSICS.jumpBufferFrames,
-  wallJumpX: PHYSICS.wallJump.x,
-  wallJumpY: PHYSICS.wallJump.y,
-  wallSlideSpeed: PHYSICS.wallSlideSpeed,
-  boostRecharge: PHYSICS.boostRecharge,
-  flowWindow: FLOW.window,
-  moveSpeed: 1,
-  jumpForce: 1,
-  diveBounceMinSpeed: PHYSICS.diveBounceMinSpeed,
-  tips: 1,
-};
+/**
+ * Used when no gear is supplied, e.g. in tests.
+ *
+ * Derived from the real resolver rather than written out again, so a new piece
+ * of gear cannot add a field the ungeared default silently lacks.
+ */
+const DEFAULT_LOADOUT = resolveLoadout();
 
 const PLAYER_W = 32;
 const PLAYER_H = 48;
@@ -101,6 +82,11 @@ export class Game {
     this.aiming = false;
     this.hint = null;
     this.nearMissCooldown = 0;
+    // Whether the bag is on course to be caught or to be lost, recomputed
+    // periodically and shown as a glow round the edge of the screen.
+    this.bagOutlook = { state: 'none', urgency: 0, impactIn: Infinity, landing: null };
+    this.outlookAge = 0;
+    this.catchGlow = 0;
     this.lastSteer = 1;   // which direction key was pressed most recently
     this.recentCatchAt = -Infinity; // gameplay ms of the last mid-air catch
     this.charging = false;          // mouse held: winding up a throw
@@ -327,6 +313,14 @@ export class Game {
     this.#stepFood();
     this.#stepPickups();
     this.#stepHazards();
+    // The look-ahead walks the bag's whole arc against every platform, so it
+    // runs a few times a second rather than every frame.
+    if (--this.outlookAge <= 0) {
+      this.#assessBag();
+      this.outlookAge = 4;
+    }
+    if (this.catchGlow > 0) this.catchGlow--;
+
     this.#stepHint();
     this.#stepGoal();
     this.#stepParticles();
@@ -445,7 +439,7 @@ export class Game {
     const boosting = p.boost > 0;
 
     // Empty hands are faster — that is the reward for risking the throw.
-    const handsBonus = p.hasFood ? 1 : PHYSICS.emptyHandBonus;
+    const handsBonus = p.hasFood ? 1 : this.loadout.emptyHandBonus;
     const baseSpeed = (tuning?.speed ?? PHYSICS.moveSpeed)
       * phys.moveSpeedScale * buffSpeed * handsBonus * this.loadout.moveSpeed
       * (boosting ? (tuning?.boost ?? 1.4) : 1);
@@ -604,8 +598,8 @@ export class Game {
       const dist = Math.hypot(dx, dy);
       if (dist > 1) {
         if (p.sliding) this.#endSlide();
-        p.vx = (dx / dist) * PHYSICS.diveSpeed;
-        p.vy = (dy / dist) * PHYSICS.diveSpeed;
+        p.vx = (dx / dist) * this.loadout.diveSpeed;
+        p.vy = (dy / dist) * this.loadout.diveSpeed;
         // A flat dive started on the ground would re-land on the very next
         // frame and cancel itself, so give it just enough lift to skim.
         if (p.grounded && p.vy >= 0) p.vy = PHYSICS.diveGroundLift;
@@ -630,7 +624,7 @@ export class Game {
     const gravityScale = p.diving ? PHYSICS.diveGravityScale : 1;
     p.vy += PHYSICS.gravity * phys.gravityScale * gravityScale;
 
-    const terminal = p.wallSliding ? this.loadout.wallSlideSpeed : PHYSICS.terminalVelocity;
+    const terminal = p.wallSliding ? this.loadout.wallSlideSpeed : this.loadout.terminalVelocity;
     if (p.vy > terminal) p.vy = terminal;
 
     // The dive's speed window is short, but a dive off a height takes far
@@ -644,7 +638,7 @@ export class Game {
 
     // Dive bounce: land a fast dive and rebound instead of splatting.
     if (wasDiving && p.grounded && wasAirborne && impactSpeed >= this.loadout.diveBounceMinSpeed) {
-      p.vy = PHYSICS.diveBounce * phys.jumpForceScale;
+      p.vy = this.loadout.diveBounce * phys.jumpForceScale;
       p.grounded = false;
       p.groundPlatform = null;
       p.diving = false;
@@ -916,6 +910,10 @@ export class Game {
     this.food.catchCooldown = PHYSICS.catchCooldown;
     this.food.wallBouncesLeft = this.loadout.bagWallBounces;
 
+    // Judge the throw the instant it leaves your hands: a bad one should be
+    // red before the bag has travelled, not four frames later.
+    this.#assessBag();
+    this.outlookAge = 4;
     this.#bump('foodThrown');
     this.#addFlow('throw');
     if (this.charge >= this.loadout.chargeFrames) this.#bump('chargedThrows');
@@ -989,7 +987,7 @@ export class Game {
       return;
     }
 
-    f.vy += PHYSICS.foodGravity * this.level.physics.gravityScale;
+    f.vy += PHYSICS.foodGravity * this.level.physics.gravityScale * this.loadout.foodGravity;
     f.x += f.vx;
     f.y += f.vy;
 
@@ -1016,6 +1014,8 @@ export class Game {
         f.airborne = false;
         f.magnetised = false;
         this.recentCatchAt = this.elapsed;
+        this.catchGlow = 34;
+        this.bagOutlook = { state: 'good', urgency: 1, impactIn: Infinity, landing: null };
         this.#bump('foodCaught');
         if (magnetActive) this.#bump('magnetCatches');
         this.#addFlow(p.grounded ? 'catch' : 'bagBounce');
@@ -1115,7 +1115,7 @@ export class Game {
     const launch = this.launchVelocity();
     let vx = launch.x;
     let vy = launch.y;
-    const gravity = PHYSICS.foodGravity * this.level.physics.gravityScale;
+    const gravity = PHYSICS.foodGravity * this.level.physics.gravityScale * this.loadout.foodGravity;
     const points = [];
 
     for (let i = 0; i < 70; i++) {
@@ -1128,6 +1128,101 @@ export class Game {
       if (y > this.level.height + 200) break;
     }
     return points;
+  }
+
+  /**
+   * Looks ahead along the bag's arc and decides whether it is going to be
+   * caught or lost.
+   *
+   * Only the parts that are actually knowable are treated as certain: the bag
+   * already inside the catch radius, a magnet pulling it in, or an arc that
+   * ends on a floor with the player nowhere near it. Everything in between is
+   * left as "in the air", which is a warning rather than a verdict.
+   */
+  #assessBag() {
+    const p = this.player;
+    const f = this.food;
+
+    if (p.hasFood || !f.airborne) {
+      this.bagOutlook = { state: 'none', urgency: 0, impactIn: Infinity, landing: null };
+      return;
+    }
+
+    const gravity = PHYSICS.foodGravity * this.level.physics.gravityScale * this.loadout.foodGravity;
+    const catchRadius = this.loadout.catchRadius;
+    const magnetActive = p.buffs.magnet > 0;
+
+    let x = f.x + f.size / 2;
+    let y = f.y + f.size / 2;
+    let vx = f.vx;
+    let vy = f.vy;
+
+    // The player cannot teleport, but they can chase. Rather than guessing
+    // where they will be, allow a window around where they are now that widens
+    // with time: roughly run speed sideways, roughly jump speed vertically.
+    // Guessing a trajectory was worse than useless — assuming they fall meant a
+    // bag lobbed straight over their own head read as unreachable.
+    const px = p.x + p.width / 2;
+    const py = p.y + p.height / 2;
+    const reachX = this.loadout.moveSpeed * PHYSICS.moveSpeed * this.loadout.emptyHandBonus;
+    const reachY = 3.5;
+
+    let closest = Infinity;
+    let impactIn = Infinity;
+    let landing = null;
+    let fatal = false;
+
+    for (let t = 1; t <= 150; t++) {
+      vy += gravity;
+      x += vx;
+      y += vy;
+
+      // How near the bag comes to anywhere the player could plausibly get to.
+      // Only frames past the catch cooldown count: for that first moment after
+      // a throw the bag is passing through your hands and cannot be taken back,
+      // so a bag lobbed at your own feet is a loss however close it gets.
+      if (t > f.catchCooldown) {
+        const dx = Math.max(0, Math.abs(x - px) - reachX * t * 0.6);
+        const dy = Math.max(0, Math.abs(y - py) - reachY * t);
+        closest = Math.min(closest, Math.hypot(dx, dy));
+      }
+
+      const box = { x: x - f.size / 2, y: y - f.size / 2, width: f.size, height: f.size };
+      const hit = this.level.platforms.find(plat => this.#isSolidNow(plat) && overlaps(box, plat));
+      if (hit) {
+        // A wall only glances it; a floor or ceiling ends the delivery.
+        const fromTop = (box.y + f.size) - hit.y;
+        const fromBottom = (hit.y + hit.height) - box.y;
+        const fromLeft = (box.x + f.size) - hit.x;
+        const fromRight = (hit.x + hit.width) - box.x;
+        const sideways = Math.min(fromLeft, fromRight) < Math.min(fromTop, fromBottom);
+        impactIn = t;
+        landing = { x, y };
+        fatal = !sideways && f.floorSavesLeft <= 0;
+        break;
+      }
+      if (y > this.level.height + 200) { impactIn = t; fatal = true; landing = { x, y }; break; }
+    }
+
+    // Certain good: it is already in reach, or a magnet has hold of it.
+    const distanceNow = Math.hypot(px - (f.x + f.size / 2), py - (f.y + f.size / 2));
+    const inHand = distanceNow < catchRadius * 1.25 && f.catchCooldown <= 0;
+    const good = inHand || f.magnetised || (magnetActive && distanceNow < this.loadout.magnetRadius);
+
+    // A near pass counts even when the arc ends on a floor: the floor is only
+    // what happens if the catch is missed, and saying "lost" about a bag that
+    // is about to sail through your hands is exactly backwards.
+    if (good || closest < catchRadius * 1.1) {
+      this.bagOutlook = { state: 'good', urgency: 0.5, impactIn, landing };
+      return;
+    }
+
+    // Urgency rises as the impact approaches, and is worst when the arc ends
+    // somewhere the player plainly cannot get to.
+    const doomed = fatal && closest > catchRadius * 2.2;
+    const urgency = impactIn === Infinity ? 0.3
+      : Math.min(1, 1 - impactIn / 150) * (doomed ? 1 : 0.7);
+    this.bagOutlook = { state: 'bad', urgency: Math.max(0.25, urgency), impactIn, landing };
   }
 
   // --- pickups & vehicles --------------------------------------------------
@@ -1485,10 +1580,10 @@ export class Game {
     this.started = true;
   }
 
-  /** 1..FLOW.maxMultiplier, from the best chain held this run. */
+  /** 1..the loadout's cap, from the best chain held this run. */
   flowMultiplier() {
     const ratio = Math.min(1, this.bestFlow / FLOW.max);
-    return 1 + ratio * (FLOW.maxMultiplier - 1);
+    return 1 + ratio * (this.loadout.flowMaxMultiplier - 1);
   }
 
   // --- stats batching ------------------------------------------------------
@@ -1537,6 +1632,9 @@ export class Game {
       aiming: this.aiming,
       aimDir: this.aimDir,
       hint: this.hint,
+      bag: this.catchGlow > 0
+        ? { state: 'good', urgency: this.catchGlow / 34 }
+        : { state: this.bagOutlook.state, urgency: this.bagOutlook.urgency },
       started: this.started,
       flow: this.flow,
       flowRatio: Math.min(1, this.flow / FLOW.max),
@@ -1903,6 +2001,26 @@ export class Game {
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.arc(target.x, target.y, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Where the bag is going to come down, for anyone carrying the marker.
+    if (this.loadout.landingMarker && !p.hasFood && this.bagOutlook.landing) {
+      const mark = this.bagOutlook.landing;
+      const bad = this.bagOutlook.state === 'bad';
+      ctx.save();
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = bad ? '#ef4444' : '#22c55e';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(mark.x - 14, mark.y);
+      ctx.lineTo(mark.x + 14, mark.y);
+      ctx.moveTo(mark.x, mark.y - 14);
+      ctx.lineTo(mark.x, mark.y + 14);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(mark.x, mark.y, 9, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

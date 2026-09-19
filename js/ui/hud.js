@@ -37,7 +37,16 @@ export class Hud {
     };
     this.pips.boost.hidden = true;
 
+    // A glow round the edge of the screen for the state of the bag: red while
+    // it is loose, green once it is coming back to you. It sits behind
+    // everything else and ignores pointer events, so it reads as lighting
+    // rather than as another panel to look at.
+    this.glowEl = el('div.bag-glow', { 'data-state': 'none' });
+    this.steady = options.reducedFlash === true
+      || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+
     this.root = el('div.hud', [
+      this.glowEl,
       el('div.hud__left', [
         el('div.hud__panel', [
           stat('Level', 'level'),
@@ -90,6 +99,30 @@ export class Hud {
     this.values.best.textContent = options.best != null ? formatTime(options.best) : '—';
   }
 
+  /**
+   * Drives the screen-edge glow from the engine's read on the bag.
+   *
+   * Intensity is written as a custom property rather than by swapping classes
+   * so it can ramp smoothly as an outcome becomes certain, and the whole thing
+   * is muted for anyone who has asked for less flashing.
+   */
+  #updateGlow(state) {
+    const bag = state.bag ?? { state: 'none', urgency: 0 };
+    if (this.glowEl.dataset.state !== bag.state) this.glowEl.dataset.state = bag.state;
+
+    const scale = this.options.reducedFlash ? 0.45 : 1;
+    // A slow pulse while the bag is loose, so a bad throw nags at you. Anyone
+    // who has asked for less motion gets the steady glow instead.
+    const pulse = bag.state === 'bad' && !this.steady
+      ? 0.82 + 0.18 * Math.sin(performance.now() / 150)
+      : 1;
+    const strength = (bag.state === 'none' ? 0 : bag.urgency * pulse * scale).toFixed(3);
+    if (this._glow !== strength) {
+      this._glow = strength;
+      this.glowEl.style.setProperty('--glow', strength);
+    }
+  }
+
   /** @param {object} state from Game#getHudState */
   update(state) {
     const time = this.values.time;
@@ -108,6 +141,8 @@ export class Hud {
       this.foodEl.textContent = status;
       this.foodEl.dataset.status = status.toLowerCase();
     }
+
+    this.#updateGlow(state);
 
     if (this.runValue) this.runValue.textContent = formatTime(this.runBase + state.elapsed);
 

@@ -200,6 +200,7 @@ class App {
       onRestart: () => this.retry(),
       onMenu: () => this.show('menu'),
       onPause: () => this.togglePause(),
+      reducedFlash: p.settings.reducedFlash === true,
     });
 
     this.game = game;
