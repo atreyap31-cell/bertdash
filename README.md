@@ -92,12 +92,12 @@ same route. Throwing is worth the most, because it is the biggest risk.
 
 ### The shop
 
-Tips buy **Gear** — 18 permanent upgrades across four groups, all of which
+Tips buy **Gear** — 19 permanent upgrades across four groups, all of which
 change how the game plays — and **Skins**, which are cosmetic.
 
 | Group | What it touches |
 | --- | --- |
-| Handling | Catching, throwing, and how much punishment the bag takes |
+| Handling | Catching, throwing, Bert's reach, and how much punishment the bag takes |
 | Movement | Air jumps, slides, wall kicks, dives, the bag bounce |
 | Kit | How long shields and magnets last, vehicle boost recharge |
 | Payroll | Flow duration and the size of your cut |
@@ -107,6 +107,20 @@ tips played badly, 16,000 played reasonably, and 39,000 played well — against
 147,000 for every piece of gear. Star ratings and flow are worth about 4.75x
 more than grinding, and replays taper hard, so the way to afford things is to
 play more of the campaign better rather than to farm level 1.
+
+### The highlight reel
+
+Finish a delivery and the game cuts you a short reel of the run's best moments
+before showing the results. It is not a replay of the whole thing — the
+recorder marks notable moves as they happen, weighted by the same numbers the
+flow system uses, and the reel picks the best few, spread out so it never shows
+the same two seconds twice. Each clip runs up to its moment at speed, drops
+into slow motion across it, then cuts. Any key skips; it can be turned off in
+Settings.
+
+It records state rather than inputs. Replaying inputs would mean
+re-simulating, which desyncs the moment a physics constant changes; a state
+track always plays back exactly what happened.
 
 ### Speedrun mode
 
@@ -141,7 +155,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-106 tests across five suites:
+96 tests across six suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
@@ -152,6 +166,8 @@ npm test
 - `reachability` — builds a graph of every standable surface in all 46 levels
   and breadth-first searches from spawn to goal, so no level can ship with a
   shelf nothing can reach
+- `replay` — the run recorder and the reel it cuts, including that playback
+  never re-simulates
 - `profile` — save data, achievement rules, peer-code encoding
 
 They run in plain Node against a small DOM stub in `tests/harness.mjs` — no

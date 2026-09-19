@@ -7,6 +7,8 @@ import { Hud } from './ui/hud.js';
 import { InputDisplay } from './ui/inputs.js';
 import { Editor } from './ui/editor.js';
 import { Game } from './engine/game.js';
+import { Recorder } from './engine/recorder.js';
+import { ReplayReel } from './ui/replay.js';
 import { computeParTime, starsForTime } from './engine/level.js';
 import { LEVELS, CAMPAIGN_LENGTH } from './data/levels.js';
 import { SKINS, VIEW_W, VIEW_H } from './data/config.js';
@@ -63,6 +65,7 @@ class App {
   // --- screen management ---------------------------------------------------
 
   show(screen) {
+    this.#teardownReel();
     // Leaving the game for anywhere but the results ends a run.
     if (this.run && screen !== 'result') this.endRun('Speedrun ended \u2014 you left the campaign');
     this.#teardownGame();
@@ -166,8 +169,13 @@ class App {
       'aria-label': `${target.level.title} play area`,
     });
 
+    // Record the run so a highlight reel can be cut from it on a win.
+    const recorder = p.settings.replays === false ? null : new Recorder();
+    this.recorder = recorder;
+
     const game = new Game(canvas, target.level, {
       skin,
+      recorder,
       loadout: profile.loadout(),
       bindings: profile.bindings(),
       reducedFlash: p.settings.reducedFlash === true,
@@ -320,9 +328,38 @@ class App {
 
     if (isNewBest && !firstClear) toast(`New best: ${formatTime(timeMs)}`, { icon: '★', tone: 'good' });
 
+    const reel = this.recorder?.build() ?? null;
     this.#teardownGame();
+
+    if (reel) {
+      this.#playReel(target.level, reel);
+      return;                       // the results screen follows the reel
+    }
     this.screen = 'result';
     this.#paint();
+  }
+
+  /** Plays the highlight reel, then shows the results. */
+  #playReel(level, reel) {
+    const p = profile.get();
+    const skin = SKINS.find(s => s.id === p.equippedSkin) ?? SKINS[0];
+
+    this.screen = 'replay';
+    const player = new ReplayReel({
+      level,
+      skin,
+      reel,
+      result: this.lastResult,
+      reducedFlash: p.settings.reducedFlash === true,
+      onDone: () => {
+        this.reelPlayer = null;
+        this.screen = 'result';
+        this.#paint();
+      },
+    });
+    this.reelPlayer = player;
+    this.root.replaceChildren(el('div.screen.screen--play', [player.root]));
+    player.start();
   }
 
   #handleLose(reason) {
@@ -355,6 +392,11 @@ class App {
 
   // --- teardown ------------------------------------------------------------
 
+  #teardownReel() {
+    this.reelPlayer?.destroy();
+    this.reelPlayer = null;
+  }
+
   #teardownGame() {
     if (this.hudRaf !== null) cancelAnimationFrame(this.hudRaf);
     this.hudRaf = null;
@@ -362,6 +404,7 @@ class App {
     this.pauseDialog = null;
     this.game?.destroy();
     this.game = null;
+    this.recorder = null;
     this.hud?.destroy();
     this.hud = null;
     this.inputs?.destroy();

@@ -481,6 +481,18 @@ export function openSettings(app) {
     el('label.setting', [
       el('input', {
         type: 'checkbox',
+        checked: p.settings.replays !== false,
+        onchange: event => profile.setSetting('replays', event.target.checked),
+      }),
+      el('div', [
+        el('span.setting__label', 'Highlight reel'),
+        el('span.setting__hint', 'A short cut of your best moments after each delivery. '
+          + 'Any key skips it.'),
+      ]),
+    ]),
+    el('label.setting', [
+      el('input', {
+        type: 'checkbox',
         checked: p.settings.showInputs === true,
         onchange: event => profile.setSetting('showInputs', event.target.checked),
       }),

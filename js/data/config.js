@@ -341,6 +341,9 @@ export const GEAR = [
   { id: 'reinforced',   name: 'Reinforced Bag', cost: 3400,  icon: '\u2B13', tier: 'Handling',
     description: 'One more wall glance before the bag gives out. Floors still break it.',
     effect: { bagWallBounces: 1 } },
+  { id: 'bulls_eye',    name: "Bert's Reach",   cost: 9000,  icon: '\u25CE', tier: 'Handling',
+    description: 'Bert catches from 70% further out, so an air delivery is far more forgiving.',
+    effect: { goalCatchRadius: 1.7 } },
   { id: 'cold_chain',   name: 'Cold Chain',     cost: 26000, icon: '\u2744', tier: 'Handling',
     description: 'The bag survives one hit on a floor per level. The only thing that does.',
     effect: { floorSaves: 1 } },
@@ -402,6 +405,7 @@ export function resolveLoadout(ownedIds = []) {
     bagWallBounces: PHYSICS.bagWallBounces,
     floorSaves: 0,
     catchRadius: PHYSICS.catchRadius,
+    goalCatchRadius: PHYSICS.goalCatchRadius,
     catchBoost: PHYSICS.catchBoost,
     magnetRadius: PHYSICS.magnetCatchRadius,
     magnetDuration: PHYSICS.magnetFrames,
@@ -435,6 +439,7 @@ export function resolveLoadout(ownedIds = []) {
       loadout.jumpBufferFrames += effect.graceFrames;
     }
     if (effect.catchRadius) loadout.catchRadius *= effect.catchRadius;
+    if (effect.goalCatchRadius) loadout.goalCatchRadius *= effect.goalCatchRadius;
     if (effect.catchBoost) loadout.catchBoost *= effect.catchBoost;
     if (effect.magnetRadius) loadout.magnetRadius *= effect.magnetRadius;
     if (effect.magnetDuration) loadout.magnetDuration *= effect.magnetDuration;

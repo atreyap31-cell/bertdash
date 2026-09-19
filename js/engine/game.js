@@ -14,6 +14,7 @@ const DEFAULT_LOADOUT = {
   bagWallBounces: PHYSICS.bagWallBounces,
   floorSaves: 0,
   catchRadius: PHYSICS.catchRadius,
+  goalCatchRadius: PHYSICS.goalCatchRadius,
   catchBoost: PHYSICS.catchBoost,
   magnetRadius: PHYSICS.magnetCatchRadius,
   magnetDuration: PHYSICS.magnetFrames,
@@ -56,6 +57,17 @@ export class Game {
     this.onStats = options.onStats ?? (() => {});
     this.onPauseRequest = options.onPauseRequest ?? (() => {});
     this.reducedFlash = Boolean(options.reducedFlash);
+    // Replay mode: the loop stops simulating and plays a recorded track back
+    // instead, so a reel shows exactly what happened rather than a
+    // re-simulation that can drift.
+    this.replay = options.replay ?? null;
+    this.replayCursor = 0;
+    this.replaySpeed = 1;
+    this.replayZoom = 1;
+    this.onReplayEnd = options.onReplayEnd ?? (() => {});
+
+    // Optional run recorder, for the post-level highlight reel.
+    this.recorder = options.recorder ?? null;
     // 0 disables screen shake entirely; reduced-flash damps it.
     this.shakeScale = options.shakeScale ?? (this.reducedFlash ? 0.4 : 1);
     // Gear bought in the store folds into a single set of modifiers, so the
@@ -88,6 +100,7 @@ export class Game {
     this.aimDir = { x: 1, y: 0 };
     this.aiming = false;
     this.hint = null;
+    this.nearMissCooldown = 0;
     this.lastSteer = 1;   // which direction key was pressed most recently
     this.recentCatchAt = -Infinity; // gameplay ms of the last mid-air catch
     this.charging = false;          // mouse held: winding up a throw
@@ -266,6 +279,12 @@ export class Game {
     const delta = Math.min(now - this.lastFrame, MAX_FRAME_MS);
     this.lastFrame = now;
 
+    if (this.replay) {
+      this.#stepReplay(delta);
+      this.#render();
+      return;
+    }
+
     if (!this.paused) {
       this.accumulator += delta;
       let steps = 0;
@@ -312,6 +331,7 @@ export class Game {
     this.#stepGoal();
     this.#stepParticles();
     this.#stepCamera();
+    this.recorder?.record(this);
     this.shake *= PHYSICS.shake.decay;
     if (this.shake < PHYSICS.shake.cutoff) this.shake = 0;
     this.pressed.clear();
@@ -1025,7 +1045,7 @@ export class Game {
     // still counts if it gets there first.
     const toGoalX = (f.x + f.size / 2) - this.level.goalPos.x;
     const toGoalY = (f.y + f.size / 2) - this.level.goalPos.y;
-    if (Math.hypot(toGoalX, toGoalY) < PHYSICS.goalCatchRadius) {
+    if (Math.hypot(toGoalX, toGoalY) < this.loadout.goalCatchRadius) {
       this.#deliver({ byThrow: true });
       return;
     }
@@ -1174,6 +1194,22 @@ export class Game {
     const p = this.player;
     const box = { x: p.x, y: p.y, width: p.width, height: p.height };
 
+    // A hazard skimmed at speed is the most watchable thing in a run that
+    // never actually goes wrong, so flag it for the reel.
+    if (this.recorder && this.nearMissCooldown <= 0 && Math.hypot(p.vx, p.vy) > 9) {
+      const grazed = this.level.platforms.some(plat => {
+        if (plat.type !== 'spike' && !(plat.type === 'laser' && plat.active)) return false;
+        const dx = Math.max(plat.x - (p.x + p.width), p.x - (plat.x + plat.width), 0);
+        const dy = Math.max(plat.y - (p.y + p.height), p.y - (plat.y + plat.height), 0);
+        return Math.hypot(dx, dy) < 26;
+      });
+      if (grazed) {
+        this.recorder.mark('nearMiss', 5);
+        this.nearMissCooldown = 60;
+      }
+    }
+    if (this.nearMissCooldown > 0) this.nearMissCooldown--;
+
     for (const plat of this.level.platforms) {
       if (plat.type === 'spike') {
         if (overlaps(box, plat)) return this.#kill('SPIKE');
@@ -1215,6 +1251,7 @@ export class Game {
     if (this.finished || this.deathReason) return;
     this.finished = true;
 
+    this.recorder?.mark('finish', 99);
     if (byThrow) {
       this.#addFlow('airDelivery');
       this.#bump('airDeliveries');
@@ -1335,6 +1372,84 @@ export class Game {
     if (Math.abs(targetY - this.camera.y) < 0.2) this.camera.y = targetY;
   }
 
+  // --- replay --------------------------------------------------------------
+
+  /**
+   * Advances the reel. Clips are played in order at whatever speed the caller
+   * has set, and the player and bag are placed from the recording rather than
+   * simulated, so nothing can diverge from the run that actually happened.
+   */
+  #stepReplay(deltaMs) {
+    const reel = this.replay;
+    const clip = reel.clips[reel.index];
+    if (!clip) { this.onReplayEnd(); return; }
+
+    this.replayCursor += (deltaMs / SIM_STEP) * this.replaySpeed;
+    let frameIndex = Math.round(clip.from + this.replayCursor);
+
+    if (frameIndex > clip.to) {
+      reel.index++;
+      this.replayCursor = 0;
+      if (reel.index >= reel.clips.length) { this.onReplayEnd(); return; }
+      frameIndex = reel.clips[reel.index].from;
+    }
+
+    const frame = reel.frames[Math.min(frameIndex, reel.frames.length - 1)];
+    if (frame) this.#applyFrame(frame);
+
+    // Platforms, lasers and doors keep cycling so the world is alive behind
+    // the action, and particles keep settling.
+    this.worldTime += deltaMs * this.replaySpeed;
+    this.#stepPlatforms();
+    this.#stepParticles();
+    this.#frameCamera();
+  }
+
+  /** Places the world from one recorded frame. */
+  #applyFrame(f) {
+    const p = this.player;
+    p.x = f.x; p.y = f.y; p.width = f.w; p.height = f.h;
+    p.vx = f.vx; p.vy = f.vy;
+    p.facingRight = f.face;
+    p.sliding = f.slide;
+    p.diving = f.dive;
+    p.wallSliding = f.wall;
+    p.wallDir = f.wallDir;
+    p.hasFood = f.hasFood;
+    p.buffs.shield = f.shield ? 1 : 0;
+    p.buffs.magnet = f.magnet ? 1 : 0;
+    p.buffs.speed = f.speed ? 1 : 0;
+    p.buffs.jump = f.jump ? 1 : 0;
+    p.vehicle = null;          // vehicles are drawn from the level, not ridden
+    this.food.x = f.fx;
+    this.food.y = f.fy;
+    this.food.airborne = f.fair;
+    this.elapsed = f.t;
+    this.flow = f.flow;
+  }
+
+  /** Tight, eased framing on the action, independent of the play camera. */
+  #frameCamera() {
+    const p = this.player;
+    const view = { w: VIEW_W / this.replayZoom, h: VIEW_H / this.replayZoom };
+    const maxX = Math.max(0, this.level.width - view.w);
+    const maxY = Math.max(0, this.level.height - view.h);
+    const targetX = clamp(p.x + p.width / 2 - view.w / 2, 0, maxX);
+    const targetY = clamp(p.y + p.height / 2 - view.h / 2, 0, maxY);
+    this.camera.x += (targetX - this.camera.x) * 0.2;
+    this.camera.y += (targetY - this.camera.y) * 0.2;
+  }
+
+  /** Jumps the camera straight to the player, for the start of a clip. */
+  snapCamera() {
+    const p = this.player;
+    const view = { w: VIEW_W / this.replayZoom, h: VIEW_H / this.replayZoom };
+    this.camera.x = clamp(p.x + p.width / 2 - view.w / 2, 0,
+      Math.max(0, this.level.width - view.w));
+    this.camera.y = clamp(p.y + p.height / 2 - view.h / 2, 0,
+      Math.max(0, this.level.height - view.h));
+  }
+
   // --- flow ----------------------------------------------------------------
 
   /**
@@ -1343,6 +1458,8 @@ export class Game {
    */
   #addFlow(move) {
     const base = FLOW.values[move] ?? 1;
+    // The flow weight doubles as "how worth watching is this".
+    this.recorder?.mark(move, base);
     const value = move === this.lastMove ? base * FLOW.repeatFalloff : base;
     this.lastMove = move;
     this.flow = Math.min(FLOW.max, this.flow + value);
@@ -1444,13 +1561,15 @@ export class Game {
     this.#drawBackground(ctx);
 
     ctx.save();
+    // Replays push in on the action; normal play is always 1:1.
+    if (this.replayZoom !== 1) ctx.scale(this.replayZoom, this.replayZoom);
     ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
 
     this.#drawGoal(ctx);
     this.#drawPlatforms(ctx);
     this.#drawPowerups(ctx);
     this.#drawVehicles(ctx);
-    if (!this.deathReason) this.#drawAim(ctx);
+    if (!this.deathReason && !this.replay) this.#drawAim(ctx);
     this.#drawFood(ctx);
     if (!this.deathReason) this.#drawPlayer(ctx);
     this.#drawParticles(ctx);

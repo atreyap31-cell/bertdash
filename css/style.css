@@ -1128,3 +1128,89 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 .lesson__title { font-weight: 800; font-size: 0.95rem; }
 .lesson__teaches { font-size: 0.74rem; color: var(--text-faint); }
 .lesson__done { color: var(--green); font-size: 1.1rem; }
+
+/* --- highlight reel ------------------------------------------------------- */
+
+.reel {
+  position: relative;
+  width: min(100%, calc((100vh - 40px) * 4 / 3));
+  aspect-ratio: 4 / 3;
+  max-height: calc(100vh - 24px);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.stage__canvas--reel { border-radius: 0; border: none; cursor: default; }
+
+/* Letterbox. They close in slightly during slow motion. */
+.reel__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8%;
+  background: #000;
+  transition: height 0.4s ease;
+  pointer-events: none;
+}
+.reel__bar--top { top: 0; }
+.reel__bar--bottom { bottom: 0; }
+.reel.is-slow .reel__bar { height: 11%; }
+
+.reel__title {
+  position: absolute;
+  top: calc(8% + 16px);
+  left: 22px;
+  display: grid;
+  gap: 2px;
+  pointer-events: none;
+}
+.reel__level {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.7);
+}
+.reel__time { font-family: var(--mono); font-size: 1.3rem; font-weight: 800; color: var(--yellow); }
+
+.reel__label {
+  position: absolute;
+  left: 22px;
+  bottom: calc(8% + 18px);
+  font-size: 1.5rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.reel__label.is-in { animation: reel-label 0.4s cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes reel-label {
+  from { opacity: 0; transform: translateX(-18px); }
+}
+
+.reel__counter {
+  position: absolute;
+  right: 22px;
+  bottom: calc(8% + 22px);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: rgba(226, 232, 240, 0.55);
+  pointer-events: none;
+}
+
+.reel__skip {
+  position: absolute;
+  top: calc(8% + 16px);
+  right: 22px;
+  padding: 7px 15px;
+  background: rgba(5, 6, 10, 0.6);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.reel__skip:hover { color: var(--text); border-color: var(--text-faint); }
