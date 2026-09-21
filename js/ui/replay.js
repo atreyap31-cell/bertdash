@@ -1,22 +1,18 @@
-// The post-level highlight reel.
+// The post-level replay.
 //
-// Not a replay of the whole run — a short cut of its best moments, chosen by
-// the recorder. Each clip runs up to its moment at speed, drops into slow
-// motion across it, then cuts to the next.
+// The whole run played back from the view you played it in: the camera follows
+// the player and leans towards the bag while it is loose, and that is all.
+//
+// It used to cut a cinematic — the best few moments, slow motion across each,
+// hard cuts between them. It looked like a trailer, and you could not follow
+// what you had actually done. Watching your own run back is more useful.
+//
+// It still names each move as it goes past, because the recorder marks them
+// anyway and a label costs nothing.
 
 import { el, formatTime } from './dom.js';
 import { Game } from '../engine/game.js';
 import { VIEW_W, VIEW_H } from '../data/config.js';
-
-/** How the camera and clock behave around a clip's key frame. */
-const SHOT = {
-  runUpSpeed: 1,
-  slowSpeed: 0.28,
-  slowWindow: 22,     // frames either side of the moment played slowly
-  runUpZoom: 1.25,
-  slowZoom: 1.75,
-  zoomEase: 0.07,
-};
 
 export class ReplayReel {
   /**
@@ -33,18 +29,16 @@ export class ReplayReel {
     });
 
     this.label = el('div.reel__label');
-    this.counter = el('div.reel__counter');
+    this.progressFill = el('div.reel__progress-fill');
 
     this.root = el('div.reel', [
       this.canvas,
-      el('div.reel__bar.reel__bar--top'),
-      el('div.reel__bar.reel__bar--bottom'),
       el('div.reel__title', [
         el('span.reel__level', level.title),
         el('span.reel__time', formatTime(result.timeMs)),
       ]),
       this.label,
-      this.counter,
+      el('div.reel__progress', [this.progressFill]),
       el('button.reel__skip', { onclick: () => this.#end() }, 'Skip →'),
     ]);
 
@@ -54,7 +48,6 @@ export class ReplayReel {
       replay: this.reel,
       shakeScale: reducedFlash ? 0.3 : 0.7,
       onReplayEnd: () => this.#end(),
-      onReplayCut: () => this.#cut(),
       onWin: () => {}, onLose: () => {}, onStats: () => {},
     });
 
@@ -68,73 +61,31 @@ export class ReplayReel {
 
   start() {
     addEventListener('keydown', this.onKey);
-    this.game.replayZoom = SHOT.runUpZoom;
+    // Played back as it happened: no slow motion, no push-in.
+    this.game.replaySpeed = 1;
+    this.game.replayZoom = 1;
     this.game.start();
-    // Place the camera before the first frame so it does not fly in.
-    this.#applyShot(true);
+    this.game.snapCamera();
     this.#tick();
   }
 
-  /** Per-frame direction: speed, zoom and the caption. */
   #tick = () => {
     if (this.finished) return;
     this.raf = requestAnimationFrame(this.#tick);
 
-    const reel = this.reel;
-    const clip = reel.clips[reel.index];
-    if (!clip) return;
-
-    this.#applyShot(false);
-
-    if (this.label.textContent !== clip.label) {
-      this.label.textContent = clip.label;
-      // Restart the entry animation on each cut.
-      this.label.classList.remove('is-in');
-      void this.label.offsetWidth;
-      this.label.classList.add('is-in');
-    }
-    const counter = `${reel.index + 1} / ${reel.clips.length}`;
-    if (this.counter.textContent !== counter) this.counter.textContent = counter;
-  };
-
-  /** Slows down and pushes in as the clip reaches its moment. */
-  #applyShot(immediate) {
-    const game = this.game;
     const clip = this.reel.clips[this.reel.index];
     if (!clip) return;
 
-    const frame = clip.from + game.replayCursor;
-    const distance = Math.abs(frame - clip.at);
-    const inSlowMo = distance <= SHOT.slowWindow;
-
-    game.replaySpeed = inSlowMo ? SHOT.slowSpeed : SHOT.runUpSpeed;
-
-    const targetZoom = inSlowMo ? SHOT.slowZoom : SHOT.runUpZoom;
-    game.replayZoom += (targetZoom - game.replayZoom) * SHOT.zoomEase;
-
-    if (immediate) {
-      game.replayZoom = targetZoom;
-      game.snapCamera();
+    const shown = this.game.replayLabel ?? '';
+    if (this.label.textContent !== shown) {
+      this.label.textContent = shown;
+      this.label.classList.toggle('is-in', shown !== '');
     }
-    this.root.classList.toggle('is-slow', inSlowMo);
-  }
 
-  /**
-   * Called by the engine the moment it moves to the next clip, before it
-   * places the camera.
-   *
-   * Resetting the zoom here rather than letting it ease means the new clip
-   * opens on its own framing instead of inheriting the last one's push-in, and
-   * it happens before the camera is positioned, so the snap uses the right
-   * view size.
-   */
-  #cut() {
-    this.game.replayZoom = SHOT.runUpZoom;
-    // A single dark frame reads as an edit rather than a glitch.
-    this.root.classList.add('is-cut');
-    clearTimeout(this.cutTimer);
-    this.cutTimer = setTimeout(() => this.root.classList.remove('is-cut'), 90);
-  }
+    const span = Math.max(1, clip.to - clip.from);
+    const done = Math.min(1, this.game.replayCursor / span);
+    this.progressFill.style.width = `${(done * 100).toFixed(1)}%`;
+  };
 
   #end() {
     if (this.finished) return;
@@ -144,7 +95,6 @@ export class ReplayReel {
   }
 
   destroy() {
-    clearTimeout(this.cutTimer);
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = null;
     removeEventListener('keydown', this.onKey);

@@ -50,6 +50,11 @@ export const PHYSICS = {
   // hundred pixels in one frame and the camera visibly lurches every time you
   // stop — which reads as the whole screen shaking.
   cameraLeadEase: 0.05,
+  // Replay framing. Looser than play because the recording has no input to
+  // anticipate, and biased towards the bag so a throw and its catch share the
+  // screen without the player leaving it.
+  replayCameraEase: 0.12,
+  replayBagBias: 0.35,
 
   // Screen shake, per event. Deliberately small: these fire often — every dive
   // bounce, every bag catch — and a big kick on each one makes the game look

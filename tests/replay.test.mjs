@@ -91,8 +91,7 @@ test('notable moves are marked, ordinary ones are not', () => {
   game.destroy();
 });
 
-test('the reel ends on the finish', () => {
-  // Far enough away that the run is long enough to be worth watching.
+test('the reel is the whole run, start to finish', () => {
   const { game, recorder, events } = boot(fixture({ goalPos: { x: 2400, y: 470 } }));
   keys.down('KeyD');
   for (let i = 0; i < 600 && !events.win; i++) advance(1);
@@ -101,30 +100,9 @@ test('the reel ends on the finish', () => {
 
   const reel = recorder.build();
   assert.ok(reel, 'there should be a reel');
-  assert.equal(reel.clips.at(-1).kind, 'finish', 'the last shot is always the delivery');
-  game.destroy();
-});
-
-test('clips stay inside the recording and do not overlap the same instant', () => {
-  const { game, recorder } = boot();
-  keys.down('KeyD');
-  for (let i = 0; i < 8; i++) {
-    advance(20);
-    keys.down('Space'); advance(10); keys.up('Space');
-  }
-  keys.up('KeyD');
-
-  const reel = recorder.build();
-  assert.ok(reel, 'there should be a reel');
-  for (const clip of reel.clips) {
-    assert.ok(clip.from >= 0, 'a clip cannot start before the recording');
-    assert.ok(clip.to < reel.frames.length, 'a clip cannot run past the recording');
-    assert.ok(clip.to > clip.from, 'a clip must have length');
-  }
-  const ats = reel.clips.map(c => c.at).sort((a, b) => a - b);
-  for (let i = 1; i < ats.length; i++) {
-    assert.ok(ats[i] - ats[i - 1] >= 90, 'clips should not show the same two seconds twice');
-  }
+  assert.equal(reel.clips.length, 1, 'one continuous take, not a montage');
+  assert.equal(reel.clips[0].from, 0, 'it starts at the start');
+  assert.equal(reel.clips[0].to, reel.frames.length - 1, 'and runs to the end');
   game.destroy();
 });
 
@@ -269,45 +247,52 @@ test('playing at full speed still lands exactly on the recorded frames', () => {
   game.destroy();
 });
 
-test('a cut jumps the camera rather than sliding it across the level', () => {
-  const { recorder } = boot();
-  // Two moments far apart, so easing between them would be a long swoop.
-  keys.down('KeyD');
-  advance(60);
-  airJump();
-  advance(220);
-  airJump();
-  advance(140);
-  keys.up('KeyD');
-  const reel = recorder.build();
-  assert.ok(reel && reel.clips.length >= 2, 'need at least two clips to cut between');
+test('the camera keeps the player on screen for the whole replay', () => {
+  const { game } = playback();
+  game.replaySpeed = 1;
 
-  resetClock();
-  let cuts = 0;
-  const game = new Game(makeCanvas({ record: false }), fixture(), {
-    skin: { color: '#06c167', textColor: '#fff' },
-    replay: { ...reel, index: 0 },
-    onReplayCut: () => { cuts++; },
-    onReplayEnd: () => {}, onWin: () => {}, onLose: () => {}, onStats: () => {},
-  });
-  game.start();
-
-  let index = 0;
-  let easedAcrossACut = false;
-  for (let i = 0; i < 3000 && game.replay.index < reel.clips.length; i++) {
+  let worst = 0;
+  for (let i = 0; i < 400; i++) {
     advance(1);
-    if (game.replay.index !== index) {
-      index = game.replay.index;
-      // Straight after a cut the camera must already be framing the new
-      // moment, not still travelling towards it.
-      const target = game.player.x + game.player.width / 2 - 400;
-      if (Math.abs(game.camera.x - Math.max(0, target)) > 40) easedAcrossACut = true;
-    }
+    const dx = (game.player.x + game.player.width / 2) - (game.camera.x + 400);
+    const dy = (game.player.y + game.player.height / 2) - (game.camera.y + 300);
+    worst = Math.max(worst, Math.abs(dx), Math.abs(dy));
   }
   game.destroy();
+  assert.ok(worst < 360, `the player should stay framed, drifted ${worst.toFixed(0)}px off centre`);
+});
 
-  assert.ok(cuts >= 1, 'the reel should have cut at least once');
-  assert.ok(!easedAcrossACut, 'the camera should be in place the frame a cut happens');
+test('the camera leans towards the bag while it is loose', () => {
+  const { game } = playback();
+  game.replaySpeed = 1;
+  advance(30);
+
+  // Put the bag well off to one side and let the camera settle.
+  const p = game.player;
+  p.hasFood = false;
+  game.food.airborne = true;
+  const centred = game.camera.x;
+  game.food.x = p.x + 600;
+  game.food.y = p.y;
+  for (let i = 0; i < 40; i++) {
+    game.food.x = p.x + 600;      // hold it there against the recording
+    game.food.y = p.y;
+    game.food.airborne = true;
+    p.hasFood = false;
+    advance(1);
+  }
+  const leaned = game.camera.x;
+  game.destroy();
+  assert.ok(leaned > centred,
+    `the camera should drift towards a loose bag (${centred.toFixed(0)} -> ${leaned.toFixed(0)})`);
+});
+
+test('a replay runs at normal speed and normal zoom', () => {
+  const { game } = playback();
+  assert.equal(game.replayZoom, 1, 'no push-in');
+  advance(10);
+  assert.equal(game.replayZoom, 1, 'and it stays that way');
+  game.destroy();
 });
 
 test('the canvas is drawn at the display density, not a fixed 800x600', () => {

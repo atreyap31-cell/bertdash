@@ -48,7 +48,6 @@ export class Game {
     this.replaySpeed = 1;
     this.replayZoom = 1;
     this.onReplayEnd = options.onReplayEnd ?? (() => {});
-    this.onReplayCut = options.onReplayCut ?? null;
     // The ghost of the best run on this level, if there is one and the player
     // wants to see it. Purely decorative: it never touches the simulation.
     this.ghost = options.ghost ?? null;
@@ -1605,11 +1604,17 @@ export class Game {
     this.#stepParticles();
     this.#stepRings();
 
+    // The move being shown, if the cursor has just gone past a mark.
+    const absolute = Math.floor(cursor) + (reel.dropped ?? 0);
+    const recent = (reel.marks ?? []).filter(m =>
+      m.frame <= absolute && m.frame > absolute - 40);
+    this.replayLabel = recent.length ? recent[recent.length - 1].label : '';
+
     if (cut) {
-      // Let the reel reset its shot before the camera is placed, then cut
-      // rather than easing: sliding the camera across the level between two
-      // unrelated moments is a swoop, not an edit.
-      this.onReplayCut?.(reel.index);
+      // A reel is one continuous take now, so this only runs if something ever
+      // hands the engine several clips again. Place the camera rather than
+      // easing it: sliding across the level between two unrelated moments is a
+      // swoop, not an edit.
       this.snapCamera();
     } else {
       this.#frameCamera();
@@ -1662,19 +1667,37 @@ export class Game {
     this.flow = f.flow;
   }
 
-  /** Tight, eased framing on the action, independent of the play camera. */
+  /**
+   * The replay camera: the same view you played with, leaning towards the bag
+   * while it is loose.
+   *
+   * It used to push in tight on each moment, which is fine for a trailer and
+   * useless for watching what you did. This keeps the player framed as in
+   * play, and drifts part of the way towards the bag when it is in the air so
+   * a throw and its catch are both on screen.
+   */
   #frameCamera() {
     const p = this.player;
+    const f = this.food;
     const view = { w: VIEW_W / this.replayZoom, h: VIEW_H / this.replayZoom };
     const maxX = Math.max(0, this.level.width - view.w);
     const maxY = Math.max(0, this.level.height - view.h);
-    const targetX = clamp(p.x + p.width / 2 - view.w / 2, 0, maxX);
-    const targetY = clamp(p.y + p.height / 2 - view.h / 2, 0, maxY);
-    this.camera.x += (targetX - this.camera.x) * 0.2;
-    this.camera.y += (targetY - this.camera.y) * 0.2;
+
+    let focusX = p.x + p.width / 2;
+    let focusY = p.y + p.height / 2;
+    if (!p.hasFood && f.airborne) {
+      // Part of the way, not all: the player stays the subject.
+      focusX += ((f.x + f.size / 2) - focusX) * PHYSICS.replayBagBias;
+      focusY += ((f.y + f.size / 2) - focusY) * PHYSICS.replayBagBias;
+    }
+
+    const targetX = clamp(focusX - view.w / 2, 0, maxX);
+    const targetY = clamp(focusY - view.h / 2, 0, maxY);
+    this.camera.x += (targetX - this.camera.x) * PHYSICS.replayCameraEase;
+    this.camera.y += (targetY - this.camera.y) * PHYSICS.replayCameraEase;
   }
 
-  /** Jumps the camera straight to the player, for the start of a clip. */
+  /** Places the camera on the player without easing, for the first frame. */
   snapCamera() {
     const p = this.player;
     const view = { w: VIEW_W / this.replayZoom, h: VIEW_H / this.replayZoom };

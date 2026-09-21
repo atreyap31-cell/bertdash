@@ -11,16 +11,6 @@
 /** Roughly four minutes at 60Hz. Long runs keep their most recent frames. */
 const MAX_FRAMES = 14000;
 
-/**
- * Frames of run-up and follow-through around a highlight.
- *
- * The follow-through has to outlast the slow-motion window or a clip snaps
- * back to full speed and then ends almost immediately, which reads as the cut
- * arriving early.
- */
-export const LEAD_IN = 50;
-export const LEAD_OUT = 46;
-
 /** Labels for the moments worth cutting to. */
 const LABELS = {
   bagBounce: 'BAG BOUNCE',
@@ -78,45 +68,26 @@ export class Recorder {
   }
 
   /**
-   * Picks the moments to cut to: the best few, spread out so the reel does not
-   * replay the same two seconds from three angles, always ending on the
-   * finish.
+   * The whole run, as one continuous take.
+   *
+   * This used to cut a montage: pick the best few marked moments, drop into
+   * slow motion across each one and cut between them. It looked like a trailer
+   * and read like one too — you could not follow what you had actually done.
+   * Watching the run back from the player's own view is more useful and a lot
+   * less fussy.
+   *
+   * The marks survive because they still earn their keep: the replay names
+   * each move as it goes past.
    */
-  build({ maxClips = 4, minGap = 90 } = {}) {
+  build() {
     const total = this.frames.length;
     if (total < 30) return null;
-
-    const finish = this.marks.filter(m => m.kind === 'finish').at(-1)
-      ?? { frame: total - 1 + this.dropped, kind: 'finish', label: LABELS.finish, weight: 99 };
-
-    const candidates = this.marks
-      .filter(m => m.kind !== 'finish')
-      .sort((a, b) => b.weight - a.weight || a.frame - b.frame);
-
-    const chosen = [];
-    for (const mark of candidates) {
-      if (chosen.length >= maxClips - 1) break;
-      // Do not cut to two moments that are practically the same instant.
-      if (chosen.some(c => Math.abs(c.frame - mark.frame) < minGap)) continue;
-      if (Math.abs(finish.frame - mark.frame) < minGap) continue;
-      chosen.push(mark);
-    }
-
-    chosen.push(finish);
-    chosen.sort((a, b) => a.frame - b.frame);
-
-    const clips = chosen.map(mark => {
-      const at = mark.frame - this.dropped;
-      return {
-        label: mark.label,
-        kind: mark.kind,
-        at,
-        from: Math.max(0, at - LEAD_IN),
-        to: Math.min(total - 1, at + LEAD_OUT),
-      };
-    }).filter(clip => clip.to > clip.from + 8);
-
-    if (!clips.length) return null;
-    return { frames: this.frames, clips };
+    return {
+      frames: this.frames,
+      dropped: this.dropped,
+      marks: this.marks,
+      clips: [{ label: '', kind: 'run', at: 0, from: 0, to: total - 1 }],
+    };
   }
+
 }

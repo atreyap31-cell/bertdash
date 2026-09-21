@@ -1159,31 +1159,9 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 
 /* One dark frame on a cut, so moving between two unrelated moments reads as an
    edit rather than as the picture glitching. */
-.reel.is-cut .stage__canvas--reel { opacity: 0.25; }
 .stage__canvas--reel { transition: opacity 90ms ease-out; }
 
 /* Letterbox. They close in slightly during slow motion. */
-.reel__bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 8%;
-  background: #000;
-  transition: height 0.4s ease;
-  pointer-events: none;
-}
-.reel__bar--top { top: 0; }
-.reel__bar--bottom { bottom: 0; }
-.reel.is-slow .reel__bar { height: 11%; }
-
-.reel__title {
-  position: absolute;
-  top: calc(8% + 16px);
-  left: 22px;
-  display: grid;
-  gap: 2px;
-  pointer-events: none;
-}
 .reel__level {
   font-size: 0.72rem;
   font-weight: 800;
@@ -1210,15 +1188,6 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
   from { opacity: 0; transform: translateX(-18px); }
 }
 
-.reel__counter {
-  position: absolute;
-  right: 22px;
-  bottom: calc(8% + 22px);
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: rgba(226, 232, 240, 0.55);
-  pointer-events: none;
-}
 
 .reel__skip {
   position: absolute;
@@ -1293,3 +1262,19 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 }
 .ghost-gap[data-tone='ahead']  { color: #4ade80; border-color: rgba(74, 222, 128, 0.45); }
 .ghost-gap[data-tone='behind'] { color: #f87171; border-color: rgba(248, 113, 113, 0.45); }
+
+
+/* Replay progress: how far through the run you are, since it plays the whole
+   thing rather than a handful of clips. */
+.reel__progress {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+.reel__progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--green);
+}
