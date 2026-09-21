@@ -17,6 +17,10 @@ export class Hud {
       return el('div.stat', [el('span.stat__label', label), value]);
     };
 
+    // Reads "you are ahead of / behind your best run right here", which is the
+    // only question a ghost actually raises.
+    this.ghostEl = el('div.ghost-gap', { hidden: true });
+
     this.chargeFill = el('div.charge-bar__fill');
     this.flowValue = el('span.flow__value', '0');
     this.flowMult = el('span.flow__mult', '');
@@ -64,6 +68,7 @@ export class Hud {
             el('div.charge-bar', [this.chargeFill]),
           ]),
         ]),
+        this.ghostEl,
         this.flowEl,
         el('div.hud__abilities', Object.values(this.pips)),
         (this.buffsEl = el('div.hud__buffs')),
@@ -123,6 +128,29 @@ export class Hud {
     }
   }
 
+  /**
+   * Says how far ahead of the best run you are.
+   *
+   * Measured in horizontal distance rather than seconds, because a time gap
+   * would need the ghost's clock at your position, and this reads the same at
+   * a glance: ahead is ahead.
+   */
+  #updateGhost(state) {
+    const lead = state.ghostLead;
+    const show = lead != null && state.started;
+    if (this.ghostEl.hidden === show) this.ghostEl.hidden = !show;
+    if (!show) return;
+
+    // A dead band, so standing level with the ghost does not flicker between
+    // ahead and behind.
+    const tone = lead > 40 ? 'ahead' : lead < -40 ? 'behind' : 'level';
+    if (this.ghostEl.dataset.tone !== tone) this.ghostEl.dataset.tone = tone;
+
+    const text = tone === 'level' ? 'LEVEL WITH BEST'
+      : `${lead > 0 ? '+' : '−'}${Math.abs(Math.round(lead))} vs BEST`;
+    if (this.ghostEl.textContent !== text) this.ghostEl.textContent = text;
+  }
+
   /** @param {object} state from Game#getHudState */
   update(state) {
     const time = this.values.time;
@@ -143,6 +171,7 @@ export class Hud {
     }
 
     this.#updateGlow(state);
+    this.#updateGhost(state);
 
     if (this.runValue) this.runValue.textContent = formatTime(this.runBase + state.elapsed);
 

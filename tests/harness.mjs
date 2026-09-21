@@ -110,9 +110,25 @@ export function installGlobals() {
   globalThis.dispatchWindow = (type, event) =>
     windowListeners.get(type)?.forEach(fn => fn(event));
 
+  // Enumeration matters: code that evicts old entries to make room walks the
+  // keys, and a stub without length/key would let that go untested.
   globalThis.localStorage = {
+    get length() { return store.size; },
+    key: i => [...store.keys()][i] ?? null,
     getItem: key => (store.has(key) ? store.get(key) : null),
-    setItem: (key, value) => store.set(key, String(value)),
+    setItem(key, value) {
+      const text = String(value);
+      if (globalThis.__storageQuota != null) {
+        let used = text.length;
+        for (const [k, v] of store) if (k !== key) used += v.length;
+        if (used > globalThis.__storageQuota) {
+          const error = new Error('QuotaExceededError');
+          error.name = 'QuotaExceededError';
+          throw error;
+        }
+      }
+      store.set(key, text);
+    },
     removeItem: key => store.delete(key),
     clear: () => store.clear(),
   };

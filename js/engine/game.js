@@ -49,6 +49,10 @@ export class Game {
     this.replayZoom = 1;
     this.onReplayEnd = options.onReplayEnd ?? (() => {});
     this.onReplayCut = options.onReplayCut ?? null;
+    // The ghost of the best run on this level, if there is one and the player
+    // wants to see it. Purely decorative: it never touches the simulation.
+    this.ghost = options.ghost ?? null;
+    this.ghostPose = null;
 
     // Optional run recorder, for the post-level highlight reel.
     this.recorder = options.recorder ?? null;
@@ -1676,6 +1680,11 @@ export class Game {
       aiming: this.aiming,
       aimDir: this.aimDir,
       hint: this.hint,
+      // How far ahead of the best run you are, in pixels of progress. Null
+      // when there is no ghost to compare against.
+      ghostLead: this.ghostPose
+        ? (this.player.x - this.ghostPose.x)
+        : null,
       bag: this.catchGlow > 0
         ? { state: 'good', urgency: this.catchGlow / 34 }
         : { state: this.bagOutlook.state, urgency: this.bagOutlook.urgency },
@@ -1686,6 +1695,34 @@ export class Game {
       flowMultiplier: this.flowMultiplier(),
       bagWallBouncesLeft: this.food.airborne ? this.food.wallBouncesLeft : null,
       paused: this.paused,
+    };
+  }
+
+  /**
+   * Where the ghost is at the current clock reading.
+   *
+   * Indexed by elapsed time rather than by frame, because the clock does not
+   * start until the first input: a ghost indexed by frame would set off while
+   * you were still reading the level.
+   */
+  #ghostPoseNow() {
+    const g = this.ghost;
+    if (!g?.samples?.length) return null;
+
+    const cursor = (this.elapsed / 1000) * g.rate;
+    const last = g.samples.length - 1;
+    if (cursor >= last) return { ...g.samples[last], done: true };
+
+    const i = Math.max(0, Math.floor(cursor));
+    const a = g.samples[i];
+    const b = g.samples[Math.min(i + 1, last)];
+    const t = cursor - i;
+    const mix = (from, to) => from + (to - from) * t;
+    return {
+      ...a,
+      x: mix(a.x, b.x), y: mix(a.y, b.y),
+      fx: mix(a.fx, b.fx), fy: mix(a.fy, b.fy),
+      done: false,
     };
   }
 
@@ -1733,6 +1770,9 @@ export class Game {
 
     this.#drawGoal(ctx);
     this.#drawPlatforms(ctx);
+    // Behind everything that matters: the ghost must never hide a hazard or
+    // be mistaken for the bag.
+    this.#drawGhost(ctx);
     this.#drawPowerups(ctx);
     this.#drawVehicles(ctx);
     if (!this.deathReason && !this.replay) this.#drawAim(ctx);
@@ -2134,6 +2174,59 @@ export class Game {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  /**
+   * Draws the best run's ghost: a translucent outline of where you were at
+   * this point in your best time, so you can see whether you are ahead.
+   */
+  #drawGhost(ctx) {
+    if (!this.ghost || this.replay) return;
+    const pose = this.#ghostPoseNow();
+    this.ghostPose = pose;
+    if (!pose) return;
+
+    const cam = this.camera;
+    const h = pose.slide ? SLIDE_H : PLAYER_H;
+    const y = pose.y;
+    // Cull: big levels are several thousand pixels wide.
+    if (pose.x + PLAYER_W < cam.x - 40 || pose.x > cam.x + VIEW_W + 40) return;
+    if (y + h < cam.y - 40 || y > cam.y + VIEW_H + 40) return;
+
+    ctx.save();
+    // It fades out once the ghost has finished, rather than standing on the
+    // goal for the rest of your attempt.
+    ctx.globalAlpha = pose.done ? 0.12 : 0.34;
+
+    if (pose.dive) {
+      ctx.fillStyle = 'rgba(148,163,184,0.35)';
+      ctx.fillRect(pose.x - 6, y, PLAYER_W + 12, h);
+    }
+
+    ctx.fillStyle = this.skin.color;
+    ctx.fillRect(pose.x, y, PLAYER_W, h);
+
+    // Enough detail to read which way it is facing and what it is doing,
+    // without becoming a second player you might track by mistake.
+    ctx.fillStyle = 'rgba(2,6,23,0.55)';
+    ctx.fillRect(pose.x + (pose.face ? PLAYER_W - 12 : 4), y + 6, 8, 6);
+    ctx.fillStyle = shade(this.skin.color, -30);
+    ctx.fillRect(pose.x + (pose.face ? -6 : PLAYER_W), y + 8, 6, Math.max(10, h - 22));
+
+    if (pose.wall) {
+      ctx.fillStyle = 'rgba(148,163,184,0.4)';
+      ctx.fillRect(pose.x + (pose.wallDir > 0 ? PLAYER_W : -4), y + 6, 4, h - 12);
+    }
+
+    // The ghost's bag, but only while it is in the air: a bag drawn in its
+    // hand every frame is noise.
+    if (pose.fair) {
+      ctx.globalAlpha = pose.done ? 0.1 : 0.3;
+      ctx.fillStyle = COLORS.food;
+      ctx.fillRect(pose.fx, pose.fy, FOOD_SIZE, FOOD_SIZE);
+    }
+
+    ctx.restore();
   }
 
   #drawPlayer(ctx) {

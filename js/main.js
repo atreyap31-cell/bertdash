@@ -13,6 +13,7 @@ import { computeParTime, starsForTime } from './engine/level.js';
 import { LEVELS, CAMPAIGN_LENGTH } from './data/levels.js';
 import { SKINS, VIEW_W, VIEW_H } from './data/config.js';
 import { profile } from './services/profile.js';
+import { encodeGhost, saveGhost, loadGhost } from './services/ghost.js';
 import { audio } from './services/audio.js';
 
 class App {
@@ -169,13 +170,21 @@ class App {
       'aria-label': `${target.level.title} play area`,
     });
 
-    // Record the run so a highlight reel can be cut from it on a win.
-    const recorder = p.settings.replays === false ? null : new Recorder();
+    // One recording feeds two things: the highlight reel cut on a win, and the
+    // ghost saved when the time is a new best. Either one being on is reason
+    // enough to record.
+    const wantsReel = p.settings.replays !== false;
+    const wantsGhost = p.settings.ghost !== false;
+    const recorder = (wantsReel || wantsGhost) ? new Recorder() : null;
     this.recorder = recorder;
+    this.wantsReel = wantsReel;
+    this.wantsGhost = wantsGhost;
+    this.levelId = levelId;
 
     const game = new Game(canvas, target.level, {
       skin,
       recorder,
+      ghost: wantsGhost ? loadGhost(levelId) : null,
       loadout: profile.loadout(),
       bindings: profile.bindings(),
       reducedFlash: p.settings.reducedFlash === true,
@@ -329,7 +338,14 @@ class App {
 
     if (isNewBest && !firstClear) toast(`New best: ${formatTime(timeMs)}`, { icon: '★', tone: 'good' });
 
-    const reel = this.recorder?.build() ?? null;
+    // A new best replaces the ghost. Doing this before the teardown is the
+    // only chance: the recorder goes with the game.
+    if (isNewBest && this.wantsGhost && this.recorder) {
+      const bytes = encodeGhost(this.recorder.frames, this.recorder.dropped);
+      if (bytes) saveGhost(levelId, bytes);
+    }
+
+    const reel = this.wantsReel ? (this.recorder?.build() ?? null) : null;
     this.#teardownGame();
 
     if (reel) {

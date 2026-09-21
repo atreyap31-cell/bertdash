@@ -495,6 +495,18 @@ export function openSettings(app) {
     el('label.setting', [
       el('input', {
         type: 'checkbox',
+        checked: p.settings.ghost !== false,
+        onchange: event => profile.setSetting('ghost', event.target.checked),
+      }),
+      el('div', [
+        el('span.setting__label', 'Best-run ghost'),
+        el('span.setting__hint', 'Your best time on a level runs it again alongside you, '
+          + 'and the clock says whether you are ahead.'),
+      ]),
+    ]),
+    el('label.setting', [
+      el('input', {
+        type: 'checkbox',
         checked: p.settings.showInputs === true,
         onchange: event => profile.setSetting('showInputs', event.target.checked),
       }),

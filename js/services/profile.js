@@ -5,6 +5,7 @@
 // a synchronous localStorage write per event is enough to cause frame drops.
 
 import { ACHIEVEMENTS, resolveLoadout, resolveBindings } from '../data/config.js';
+import { clearGhosts } from './ghost.js';
 
 const STORAGE_KEY = 'bertdash.profile.v1';
 const LEGACY_KEY = 'bd_offline_v4'; // save file from the old single-page build
@@ -65,7 +66,7 @@ const DEFAULT_PROFILE = {
   bestLevelTimes: {},
   bestRunMs: null,       // fastest full campaign run
   attemptsPerLevel: {},
-  settings: { sound: true, reducedFlash: false, speedrun: false, showInputs: false, screenShake: true, replays: true },
+  settings: { sound: true, reducedFlash: false, speedrun: false, showInputs: false, screenShake: true, replays: true, ghost: true },
   bindings: {},
   stats: { ...DEFAULT_STATS },
 };
@@ -313,6 +314,9 @@ class ProfileService {
   resetProgress() {
     const { username, settings } = this.#profile;
     this.#profile = { ...structuredClone(DEFAULT_PROFILE), username, settings };
+    // Ghosts live outside this blob, so they have to be cleared explicitly —
+    // otherwise a wiped profile still races times it no longer has a record of.
+    clearGhosts();
     this.save();
   }
 }

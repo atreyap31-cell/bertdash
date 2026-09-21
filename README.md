@@ -143,6 +143,32 @@ displayed frames and then jumps — which is what makes slow motion judder. Cuts
 jump the camera rather than easing it, because easing between two moments that
 are half a level apart is a swoop, not an edit.
 
+### The best-run ghost
+
+Beat a level and the run is kept. Play it again and your best time runs it
+alongside you as a translucent ghost, with a readout saying how far ahead of it
+you are. It is decoration only — it cannot touch the simulation, and a test
+pins that the same inputs produce the same run whether or not it is shown.
+
+It is indexed by the clock rather than by frame number. The timer does not
+start until your first input, so a ghost indexed by frame would set off while
+you were still reading the level, and every frame spent hesitating has to
+collapse into one sample.
+
+Storage drove the format. The profile blob is rewritten every time the engine
+bumps a stat, so a few thousand frames in it would mean re-serialising
+megabytes many times a second; ghosts therefore live in their own key per
+level, written only when a best time actually changes. Each sample is nine
+packed bytes — two each for the player and bag positions, one of flags — taken
+at 30Hz and interpolated on playback. A thirty-second run stores at about 11KB,
+roughly fifty times smaller than the same frames as JSON. If the quota is ever
+reached, the largest other ghost is evicted; if that still fails, the ghost is
+dropped silently, because losing one matters far less than failing to save a
+best time.
+
+A run long enough to have lost its opening frames is refused rather than saved,
+since a ghost that starts in the middle is worse than no ghost.
+
 ### Rendering
 
 The canvas backing store is sized to the display's real pixels, capped at 3x.
@@ -184,7 +210,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-131 tests across six suites:
+141 tests across seven suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
@@ -197,6 +223,8 @@ npm test
   shelf nothing can reach
 - `replay` — the run recorder and the reel it cuts, including that playback
   never re-simulates
+- `ghost` — packing a best run down to storage size, evicting under quota, and
+  playing it back against the clock
 - `profile` — save data, achievement rules, peer-code encoding
 
 They run in plain Node against a small DOM stub in `tests/harness.mjs` — no
