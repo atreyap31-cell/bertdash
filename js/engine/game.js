@@ -960,9 +960,25 @@ export class Game {
     const p = this.player;
     const power = this.throwPower();
     return {
-      x: this.aimDir.x * power + p.vx * PHYSICS.throwInherit * PHYSICS.emptyHandBonus,
-      y: this.aimDir.y * power + p.vy * PHYSICS.throwInheritY,
+      x: this.#carry(this.aimDir.x * power, p.vx * PHYSICS.throwInherit * PHYSICS.emptyHandBonus),
+      y: this.#carry(this.aimDir.y * power, p.vy * PHYSICS.throwInheritY),
     };
+  }
+
+  /**
+   * Folds carried momentum into one axis of a throw.
+   *
+   * Momentum that agrees with the aim is added in full: that is what makes a
+   * throw at the top of a jump launch harder, and what lets a bag tossed
+   * straight up while running travel alongside you. Momentum that fights the
+   * aim can take the edge off a throw but never reverse it, because a bag that
+   * leaves your hand in the opposite direction to the one you pointed is not a
+   * trade-off, it is the control not working.
+   */
+  #carry(aimed, momentum) {
+    if (aimed === 0 || Math.sign(momentum) === Math.sign(aimed)) return aimed + momentum;
+    const limit = Math.abs(aimed) * PHYSICS.throwOpposeMax;
+    return aimed + clamp(momentum, -limit, limit);
   }
 
   /** 0..1 — how far the current throw charge has wound up. */

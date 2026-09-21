@@ -1422,3 +1422,102 @@ test('the ungeared default matches a resolved empty loadout', async () => {
   }
   game.destroy();
 });
+
+
+// --- throws go where you aimed --------------------------------------------
+// Carried momentum used to be added to a throw unconditionally, so falling at
+// terminal velocity added more downward speed than an uncharged upward throw
+// had going up: aiming up while falling threw the bag at the floor.
+
+/** A shaft tall enough to reach terminal velocity in. */
+const SHAFT = () => fixture({
+  height: 3000, startPos: { x: 200, y: 100 }, foodPos: { x: 240, y: 100 },
+  goalPos: { x: 2900, y: 2700 },
+  platforms: [{ x: 0, y: 2800, width: 3000, height: 200, type: 'static' }],
+});
+
+/** Falls for `frames`, throws in `dirs`, and returns the bag's velocity. */
+function throwWhileFalling(dirs, frames) {
+  const { game } = boot(SHAFT());
+  advance(frames);
+  const playerVy = game.player.vy;
+  throwDir(dirs, 1);
+  const bag = { x: game.food.vx, y: game.food.vy };
+  game.destroy();
+  return { bag, playerVy };
+}
+
+test('aiming up while falling throws the bag up, not down', () => {
+  const fast = throwWhileFalling('up', 50);
+  assert.ok(fast.playerVy > 14, `should be falling hard, was ${fast.playerVy.toFixed(1)}`);
+  assert.ok(fast.bag.y < 0,
+    `a bag aimed up must leave your hand going up, got vy ${fast.bag.y.toFixed(1)}`);
+});
+
+test('aiming diagonally up while falling throws up and along', () => {
+  const { bag, playerVy } = throwWhileFalling(['up', 'right'], 50);
+  assert.ok(playerVy > 14, 'should be falling hard');
+  assert.ok(bag.y < 0, `must go up, got vy ${bag.y.toFixed(1)}`);
+  assert.ok(bag.x > 0, `must go right, got vx ${bag.x.toFixed(1)}`);
+});
+
+test('falling barely weakens an upward throw', () => {
+  const still = boot(SHAFT());
+  throwDir('up', 1);
+  const standing = still.game.food.vy;
+  still.game.destroy();
+
+  const falling = throwWhileFalling('up', 50).bag.y;
+  // It may take the edge off, but not most of it.
+  assert.ok(falling < standing * 0.5,
+    `a falling throw (${falling.toFixed(1)}) should stay close to a standing one (${standing.toFixed(1)})`);
+});
+
+test('momentum that agrees with the aim still amplifies the throw', () => {
+  // Throwing down while falling is the whole point of carrying momentum.
+  const still = boot(SHAFT());
+  throwDir('down', 1);
+  const standing = still.game.food.vy;
+  still.game.destroy();
+
+  const falling = throwWhileFalling('down', 50).bag.y;
+  assert.ok(falling > standing * 2,
+    `throwing down while falling (${falling.toFixed(1)}) should far exceed standing (${standing.toFixed(1)})`);
+});
+
+test('a throw thrown up at the top of a jump still launches harder', () => {
+  const still = boot();
+  advance(30);
+  throwDir('up', 1);
+  const standing = still.game.food.vy;
+  still.game.destroy();
+
+  const { game } = boot();
+  advance(30);
+  keys.down('Space');
+  advance(5);                 // still rising
+  assert.ok(game.player.vy < -5, 'should be on the way up');
+  throwDir('up', 1);
+  const rising = game.food.vy;
+  keys.up('Space');
+  game.destroy();
+
+  assert.ok(rising < standing * 1.5,
+    `a rising throw (${rising.toFixed(1)}) should beat a standing one (${standing.toFixed(1)})`);
+});
+
+test('the bag bounce still keeps every bit of your running speed', () => {
+  // Tossing it straight up while running must leave the bag travelling exactly
+  // alongside you — that is what makes the move reliable rather than a trick.
+  const { game } = boot();
+  keys.down('KeyD');
+  advance(60);
+  const runSpeed = game.player.vx;
+  throwDir('up', 1);
+  keys.up('KeyD');
+  const carried = game.food.vx;
+  game.destroy();
+
+  assert.ok(carried >= runSpeed,
+    `the bag should keep the runner's speed: ${carried.toFixed(1)} vs ${runSpeed.toFixed(1)}`);
+});

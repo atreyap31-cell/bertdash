@@ -57,6 +57,9 @@ lands decides the run:
   It is the fastest finish available and the hardest to pull off.
 - **Momentum carries.** The bag inherits your full speed, so a throw made at a
   sprint or off the top of a bounce goes far further than a standing toss.
+  Momentum working against your aim is capped, though: it can take the edge off
+  a throw but never reverse it, so the bag always leaves your hand in the
+  direction you pointed.
 
 ### Learning it
 
@@ -210,7 +213,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-141 tests across seven suites:
+147 tests across seven suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it

@@ -147,6 +147,12 @@ export const PHYSICS = {
   // Vertical momentum carries too, so a throw released at the top of a jump or
   // out of a bag bounce is launched much harder than one made standing still.
   throwInheritY: 0.75,
+  // How much momentum working against your aim is allowed to take off a
+  // throw, as a fraction of the throw's own strength. Without a cap, falling
+  // at terminal velocity carried more downward speed than an uncharged upward
+  // throw had going up, so aiming up while falling threw the bag at the floor.
+  // A throw now always leaves your hand in the direction you aimed it.
+  throwOpposeMax: 0.5,
   // Speed itself adds power: winding up on the run throws further than a
   // standing toss, which is what makes a running delivery worth setting up.
   throwSpeedBonus: 0.05,   // extra power per px/frame of player speed
