@@ -89,6 +89,9 @@ export class Game {
     this.aiming = false;
     this.hint = null;
     this.nearMissCooldown = 0;
+    // Expanding rings left behind by an air jump. They stay where the jump
+    // happened while the player rises away from them.
+    this.rings = [];
     // Whether the bag is on course to be caught or to be lost, recomputed
     // periodically and shown as a glow round the edge of the screen.
     this.bagOutlook = { state: 'none', urgency: 0, impactIn: Infinity, landing: null };
@@ -131,6 +134,9 @@ export class Game {
       slideTimer: 0,
       slideCooldown: 0,
       diving: false,
+      spin: 0,            // frames left of the air-jump flip
+      spinDir: 1,         // which way it rotates, from the steer at take-off
+      diveAge: 0,         // frames since the dive began, for the bounce guard
       diveArmed: false,   // a dive is "live" until you land, even after the
                           // speed window expires — that is what the bounce reads
       diveTimer: 0,
@@ -331,6 +337,7 @@ export class Game {
     this.#stepHint();
     this.#stepGoal();
     this.#stepParticles();
+    this.#stepRings();
     this.#stepCamera();
     this.recorder?.record(this);
     this.shake *= PHYSICS.shake.decay;
@@ -587,6 +594,12 @@ export class Game {
         this.#addFlow('airJump');
         audio.jump();
         this.#spawnParticles(p.x + p.width / 2, p.y + p.height, 12, '#e2e8f0');
+
+        // A full flip, so the second jump is unmistakable in the air. It turns
+        // the way you are steering, or the way you are already facing.
+        p.spin = PHYSICS.airJumpSpinFrames;
+        p.spinDir = steer !== 0 ? Math.sign(steer) : (p.facingRight ? 1 : -1);
+        this.rings.push({ x: p.x + p.width / 2, y: p.y + p.height / 2, age: 0 });
       }
     }
 
@@ -607,12 +620,19 @@ export class Game {
         if (p.sliding) this.#endSlide();
         p.vx = (dx / dist) * this.loadout.diveSpeed;
         p.vy = (dy / dist) * this.loadout.diveSpeed;
-        // A flat dive started on the ground would re-land on the very next
-        // frame and cancel itself, so give it just enough lift to skim.
-        if (p.grounded && p.vy >= 0) p.vy = PHYSICS.diveGroundLift;
+        // A near-level dive started on the ground would re-land on the very
+        // next frame and cancel itself, so those get just enough lift to skim.
+        //
+        // A dive aimed clearly downward keeps its line. Lifting every grounded
+        // dive pinned them all to the same shallow angle whatever the bag was
+        // doing, so chasing a bag over the lip of a ledge sailed you straight
+        // over the top of it.
+        const nearLevel = Math.abs(dy) < dist * PHYSICS.diveLiftMaxSlope;
+        if (p.grounded && p.vy >= 0 && nearLevel) p.vy = PHYSICS.diveGroundLift;
         p.facingRight = dx > 0;
         p.diving = true;
         p.diveArmed = true;
+        p.diveAge = 0;
         p.diveTimer = PHYSICS.diveFrames;
         p.diveCooldown = PHYSICS.diveCooldown;
         p.grounded = false;
@@ -634,9 +654,14 @@ export class Game {
     const terminal = p.wallSliding ? this.loadout.wallSlideSpeed : this.loadout.terminalVelocity;
     if (p.vy > terminal) p.vy = terminal;
 
+    this.#steerDive();
+
     // The dive's speed window is short, but a dive off a height takes far
     // longer than that to land. The bounce reads `diveArmed`, which survives
     // until the player actually touches down.
+    if (p.spin > 0) p.spin--;
+    if (p.diveArmed) p.diveAge++;
+
     const wasDiving = p.diveArmed;
     const impactSpeed = Math.hypot(p.vx, p.vy);
     const wasAirborne = !p.grounded;
@@ -644,7 +669,14 @@ export class Game {
     this.#moveAndCollide(p);
 
     // Dive bounce: land a fast dive and rebound instead of splatting.
-    if (wasDiving && p.grounded && wasAirborne && impactSpeed >= this.loadout.diveBounceMinSpeed) {
+    // The dive must have actually travelled before it can rebound. Starting a
+    // dive clears `grounded`, so without this a dive aimed downward satisfies
+    // "was airborne, now landed" on its own first frame: it hit the floor
+    // under your feet and flung you back the opposite way. Aiming at a bag
+    // below you sent you straight up.
+    const travelled = p.diveAge >= PHYSICS.diveBounceMinAge;
+    if (wasDiving && travelled && p.grounded && wasAirborne
+        && impactSpeed >= this.loadout.diveBounceMinSpeed) {
       p.vy = this.loadout.diveBounce * phys.jumpForceScale;
       p.grounded = false;
       p.groundPlatform = null;
@@ -932,6 +964,41 @@ export class Game {
    * Where a dive would send the player: at the bag when it is in the air,
    * otherwise a flat dash in the direction they are facing.
    */
+  /**
+   * Keeps a dive pointed at the bag while it is in the air.
+   *
+   * Aiming once at the moment of the dive is not a chase. The bag accelerates
+   * downward the whole time, so a dive locked to its opening line sails over
+   * the top of it: measured from a 329px gap, diving used to close it to
+   * 325px, which is to say not at all.
+   *
+   * The turn is capped per frame, so it reads as tracking rather than the bag
+   * dragging you around, and speed is preserved so steering never slows the
+   * dive down.
+   */
+  #steerDive() {
+    const p = this.player;
+    const f = this.food;
+    if (!p.diving || p.hasFood || !f.airborne) return;
+
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed < 0.01) return;
+
+    const dx = (f.x + f.size / 2) - (p.x + p.width / 2);
+    const dy = (f.y + f.size / 2) - (p.y + p.height / 2);
+    if (Math.hypot(dx, dy) < 1) return;
+
+    const heading = Math.atan2(p.vy, p.vx);
+    let delta = Math.atan2(dy, dx) - heading;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+
+    const turned = heading + clamp(delta, -PHYSICS.diveTurnRate, PHYSICS.diveTurnRate);
+    p.vx = Math.cos(turned) * speed;
+    p.vy = Math.sin(turned) * speed;
+    p.facingRight = p.vx > 0;
+  }
+
   diveTarget() {
     const p = this.player;
     const f = this.food;
@@ -1248,6 +1315,13 @@ export class Game {
     this.bagOutlook = { state: 'bad', urgency: Math.max(0.25, urgency), impactIn, landing };
   }
 
+  #stepRings() {
+    for (const ring of this.rings) ring.age++;
+    if (this.rings.length) {
+      this.rings = this.rings.filter(r => r.age < PHYSICS.airJumpRingFrames);
+    }
+  }
+
   // --- pickups & vehicles --------------------------------------------------
 
   #stepPickups() {
@@ -1529,6 +1603,7 @@ export class Game {
     this.worldTime += deltaMs * this.replaySpeed;
     this.#stepPlatforms();
     this.#stepParticles();
+    this.#stepRings();
 
     if (cut) {
       // Let the reel reset its shot before the camera is placed, then cut
@@ -1794,6 +1869,7 @@ export class Game {
     if (!this.deathReason && !this.replay) this.#drawAim(ctx);
     this.#drawFood(ctx);
     if (!this.deathReason) this.#drawPlayer(ctx);
+    this.#drawRings(ctx);
     this.#drawParticles(ctx);
 
     ctx.restore();
@@ -2245,12 +2321,44 @@ export class Game {
     ctx.restore();
   }
 
+  /** The shockwave an air jump leaves behind it. */
+  #drawRings(ctx) {
+    if (this.reducedFlash) return;
+    for (const ring of this.rings) {
+      const t = ring.age / PHYSICS.airJumpRingFrames;
+      ctx.save();
+      ctx.globalAlpha = (1 - t) * 0.55;
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 2.5 * (1 - t) + 0.5;
+      ctx.beginPath();
+      // Flattened: it reads as a puff pushed off underfoot rather than a
+      // bubble the player is sitting inside.
+      ctx.ellipse(ring.x, ring.y, 10 + t * 46, 5 + t * 20, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   #drawPlayer(ctx) {
     const p = this.player;
     const x = p.x;
     const y = p.y;
     const w = p.width;
     const h = p.height;
+
+    // The air-jump flip. Rotating about the player's own centre keeps the
+    // collision box exactly where it was: this is animation, nothing else.
+    const spinning = p.spin > 0 && !p.vehicle;
+    if (spinning) {
+      const t = 1 - p.spin / PHYSICS.airJumpSpinFrames;
+      // Eased so it whips round at the start and settles level, rather than
+      // stopping dead at whatever angle the last frame happened to land on.
+      const turn = (1 - Math.pow(1 - t, 3)) * Math.PI * 2 * p.spinDir;
+      ctx.save();
+      ctx.translate(x + w / 2, y + h / 2);
+      ctx.rotate(turn);
+      ctx.translate(-(x + w / 2), -(y + h / 2));
+    }
 
     if (p.vehicle) {
       ctx.save();
@@ -2296,6 +2404,10 @@ export class Game {
     }
 
     if (p.invuln > 0 && Math.floor(this.worldTime / 60) % 2 === 0) ctx.restore();
+
+    // The flip turns the courier, not the readouts: the buff ring and the
+    // banked-air-jump pip below stay the right way up.
+    if (spinning) ctx.restore();
 
     if (p.wallSliding) {
       ctx.fillStyle = 'rgba(148,163,184,0.5)';

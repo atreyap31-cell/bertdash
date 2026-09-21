@@ -65,3 +65,37 @@ Development scripts. Not part of the deployed site.
   ```bash
   node tools/throw-range.mjs
   ```
+
+## `reach.mjs`
+
+The movement model: which surfaces can reach which, and can the spawn reach
+Bert. Shared by `tests/reachability.test.mjs` and `bag-audit.mjs` so the test
+and the audit cannot drift apart about what the player can do.
+
+It only counts a surface you can actually stand on. Stacked wall segments look
+like a row of ledges, but their tops are buried inside the segment above them —
+THE SHAFT was nine 300px segments a side, which read as a staircase and was
+really one unbroken 2,580px wall climb against a measured limit of about 847px.
+The level was impossible and the analyser said it was fine.
+
+## `bag-audit.mjs`
+
+Runs the search twice per level: once with every move, once with the bag
+removed. A level that still finishes on the second run can be cleared on legs
+alone, so the throw is decoration there.
+
+```bash
+node tools/bag-audit.mjs --verbose
+```
+
+## `bag-gate.mjs`
+
+Lowers the platforms that reach Bert on foot until a level can only be finished
+with a bag bounce, using the analyser as the oracle: it refuses any change that
+would also make the level unsolvable, and re-checks the whole campaign before
+writing. Levels 0-9 are left alone — they are still teaching you to run.
+
+```bash
+node tools/bag-gate.mjs          # dry run
+node tools/bag-gate.mjs --write
+```

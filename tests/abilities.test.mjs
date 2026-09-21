@@ -1340,16 +1340,19 @@ test('Kick Plate rebounds a dive higher', () => {
   const rebound = (diveBounce) => {
     const { game } = bootGeared({ diveBounce });
     advance(30);
+    // Run, not aim: the arrow keys charge and throw the bag, so using one to
+    // face right also lobbed the bag away and ended the run in a drop.
+    keys.down('KeyD');
+    advance(10);
     jump(12);
     advance(6);
-    keys.down('ArrowRight');
     tap('KeyE');
-    keys.up('ArrowRight');
     let best = 0;
     for (let i = 0; i < 90; i++) {
       advance(1);
       if (game.player.vy < best) best = game.player.vy;
     }
+    keys.up('KeyD');
     game.destroy();
     return best;
   };
@@ -1520,4 +1523,132 @@ test('the bag bounce still keeps every bit of your running speed', () => {
 
   assert.ok(carried >= runSpeed,
     `the bag should keep the runner's speed: ${carried.toFixed(1)} vs ${runSpeed.toFixed(1)}`);
+});
+
+
+// --- the dive chases, and does not fling you the other way ------------------
+
+/** Angle of a vector in degrees. */
+const angleOfVec = (x, y) => Math.atan2(y, x) * 180 / Math.PI;
+const angleDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+
+/** Puts a still bag at an offset from the player and dives at it. */
+function diveAt(dx, dy) {
+  const { game } = boot();
+  advance(20);
+  const p = game.player;
+  p.hasFood = false;
+  game.food.airborne = true;
+  game.food.vx = 0;
+  game.food.vy = 0;
+  game.food.x = p.x + p.width / 2 + dx;
+  game.food.y = p.y + p.height / 2 + dy;
+  tap('KeyE');
+  const went = angleOfVec(p.vx, p.vy);
+  game.destroy();
+  return { went, wanted: angleOfVec(dx, dy) };
+}
+
+test('diving at a bag below you does not throw you upwards', () => {
+  // Starting a dive clears `grounded`, so a downward dive used to satisfy
+  // "was airborne, now landed" on its own first frame: it bounced off the
+  // floor underfoot and fired you the opposite way. Straight down became
+  // straight up, a 177-degree error.
+  const { went } = diveAt(0, 400);
+  assert.ok(went > -60,
+    `a dive at a bag directly below should not go upwards, went ${went.toFixed(0)}deg`);
+});
+
+test('a grounded dive heads towards the bag, not away from it', () => {
+  for (const [dx, dy, label] of [[300, 150, 'below-right'], [-300, 300, 'below-left']]) {
+    const { went, wanted } = diveAt(dx, dy);
+    // Standing on a floor you cannot dive through it, so the vertical part is
+    // lost; the horizontal part must still point the right way.
+    assert.ok(Math.sign(Math.cos(went * Math.PI / 180)) === Math.sign(dx),
+      `${label}: dive went ${went.toFixed(0)}deg, bag was at ${wanted.toFixed(0)}deg`);
+  }
+});
+
+test('an airborne dive points straight at the bag', () => {
+  const { game } = boot();
+  advance(20);
+  jump(12);
+  advance(4);
+  const p = game.player;
+  p.hasFood = false;
+  game.food.airborne = true;
+  game.food.vx = 0;
+  game.food.vy = 0;
+  game.food.x = p.x + p.width / 2 + 260;
+  game.food.y = p.y + p.height / 2 + 180;
+  tap('KeyE');
+  const err = angleDiff(angleOfVec(p.vx, p.vy), angleOfVec(260, 180));
+  game.destroy();
+  assert.ok(err < 20, `dive should track the bag, was ${err.toFixed(0)}deg off`);
+});
+
+test('a dive keeps steering towards a bag that is falling away', () => {
+  const { game } = boot(fixture({
+    height: 2600, startPos: { x: 200, y: 100 }, foodPos: { x: 240, y: 100 },
+    platforms: [{ x: 0, y: 2500, width: 3000, height: 100, type: 'static' }],
+  }));
+  advance(20);
+  const p = game.player;
+  p.hasFood = false;
+  game.food.airborne = true;
+  game.food.vx = 2;
+  game.food.vy = 6;
+  game.food.x = p.x + 240;
+  game.food.y = p.y + 150;
+  tap('KeyE');
+
+  // Over the dive it should bend towards the bag rather than hold its opening
+  // line, so the angle to the bag shrinks.
+  const err = () => angleDiff(angleOfVec(p.vx, p.vy),
+    angleOfVec((game.food.x - p.x), (game.food.y - p.y)));
+  const first = err();
+  let best = first;
+  for (let i = 0; i < 12; i++) { advance(1); best = Math.min(best, err()); }
+  game.destroy();
+  assert.ok(best <= first + 1,
+    `the dive should track, error went from ${first.toFixed(0)} to ${best.toFixed(0)}`);
+});
+
+// --- the air jump is visible ------------------------------------------------
+
+test('an air jump spins the courier and leaves a ring', () => {
+  const { game } = boot();
+  advance(20);
+  jump(10);
+  advance(4);
+  assert.equal(game.player.spin, 0, 'a plain jump does not spin');
+  assert.equal(game.rings.length, 0);
+
+  tap('Space');                       // the air jump
+  assert.ok(game.player.spin > 0, 'the air jump should start a flip');
+  assert.equal(game.rings.length, 1, 'and leave a ring behind it');
+
+  // It settles: the flip must be over well before a landing.
+  for (let i = 0; i < PHYSICS.airJumpSpinFrames + 2; i++) advance(1);
+  assert.equal(game.player.spin, 0, 'the flip should finish');
+  game.destroy();
+});
+
+test('the flip is animation only and never moves the player', () => {
+  const run = (withSpin) => {
+    const { game } = boot();
+    advance(20);
+    keys.down('KeyD');
+    jump(10);
+    advance(4);
+    tap('Space');
+    if (!withSpin) game.player.spin = 0;   // same jump, no flip
+    advance(40);
+    const at = { x: game.player.x, y: game.player.y };
+    keys.up('KeyD');
+    game.destroy();
+    return at;
+  };
+  assert.deepEqual(run(true), run(false),
+    'the flip must not change where the air jump takes you');
 });

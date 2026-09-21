@@ -100,6 +100,10 @@ export const PHYSICS = {
   airJumps: 1,
   airJumpForce: -13.2,
   airJumpSteer: 2.2,      // sideways kick when you air-jump while steering
+  // The flip. Long enough to read as a deliberate move, short enough to be
+  // level again well before you land.
+  airJumpSpinFrames: 16,
+  airJumpRingFrames: 18,
 
   // Wall work. You no longer have to hold into the wall to cling to it, and a
   // brief stick at the top gives you time to aim the kick.
@@ -127,6 +131,16 @@ export const PHYSICS = {
   diveBounceMinSpeed: 8,
   diveGravityScale: 0.35, // dives stay flat instead of drooping
   diveGroundLift: -3.4,   // a ground dash skims rather than scraping
+  // How far off level a grounded dive can be before it stops being given that
+  // skim. Expressed as |dy| / distance, so 0.25 is about 15 degrees.
+  diveLiftMaxSlope: 0.25,
+  // How far a dive may turn per frame while tracking the bag, in radians.
+  // About 7 degrees, so a dive can come round by roughly 110 degrees over its
+  // length - enough to follow a falling bag, not enough to fly it for you.
+  diveTurnRate: 0.12,
+  // Frames a dive must have been going before it may rebound off a landing, so
+  // it cannot bounce off the floor it launched from.
+  diveBounceMinAge: 3,
 
   // Throwing. Hold to charge for a longer throw.
   throwStrength: 9,

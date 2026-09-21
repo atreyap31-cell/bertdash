@@ -55,6 +55,8 @@ lands decides the run:
   that went wrong is a scramble, not a loss.
 - **Deliver by throw.** Land the bag on Bert from range and the level is done.
   It is the fastest finish available and the hardest to pull off.
+- **The air jump flips you**, and leaves a ring where you pushed off, so the
+  second jump is unmistakable in the air.
 - **Momentum carries.** The bag inherits your full speed, so a throw made at a
   sprint or off the top of a bounce goes far further than a standing toss.
   Momentum working against your aim is capped, though: it can take the edge off
@@ -213,7 +215,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-147 tests across seven suites:
+153 tests across seven suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
