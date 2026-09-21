@@ -291,7 +291,7 @@ export function openStore() {
           tier,
           el('span.gear-tier__count', `${owned}/${items.length}`),
         ]),
-        el('div.store__grid', items.map(item => gearCard(item, p))),
+        el('div.gear-grid', items.map(item => gearCard(item, p))),
       ]);
     }));
   };

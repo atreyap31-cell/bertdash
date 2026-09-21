@@ -953,8 +953,22 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 
 /* --- gear ---------------------------------------------------------------- */
 
+/* Gear cards are rows - icon, text, price - so they need width, unlike the
+   square skin tiles that .store__grid is sized for. Sharing that grid squeezed
+   a 177px column around a row layout and turned every card into a tower. */
+.gear-grid {
+  display: grid;
+  /* min() so a narrow phone gets one full-width column instead of overflowing. */
+  grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr));
+  gap: 12px;
+}
+
 .gear {
-  display: flex;
+  /* A grid rather than flex: an explicit 1fr for the text means the price
+     button cannot take the whole card and collapse the description to nothing,
+     which is what left it 18px wide. */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 13px;
@@ -973,12 +987,13 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
   font-size: 1.15rem;
 }
 .gear.is-owned .gear__icon { background: var(--green); color: #04160c; }
-.gear__body { flex: 1; min-width: 0; }
+.gear__body { min-width: 0; }
 .gear__name { margin: 0; font-size: 0.92rem; font-weight: 800; }
 .gear__desc { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-faint); line-height: 1.4; }
 .gear__owned {
   font-size: 0.62rem; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.1em; color: var(--green); flex: none;
+  letter-spacing: 0.1em; color: var(--green);
+  text-align: right;
 }
 
 /* Speedrun */
