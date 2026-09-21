@@ -7,6 +7,7 @@
 import { PHYSICS, resolveLoadout, COLORS, FLOW, POWERUP_BY_ID, DEFAULT_BINDINGS, AIM_ACTIONS, SIM_STEP, STEP_EPSILON, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
 import { prepareLevel, isSolidType, clamp } from './level.js';
 import { audio } from '../services/audio.js';
+import { backdropFor } from './backdrop.js';
 
 /**
  * Used when no gear is supplied, e.g. in tests.
@@ -34,6 +35,7 @@ export class Game {
     this.#sizeCanvas();
     this.ctx = canvas.getContext('2d');
     this.level = prepareLevel(levelSource);
+    this.backdrop = backdropFor(this.level);
     this.skin = options.skin ?? { color: COLORS.player, textColor: '#fff' };
     this.onWin = options.onWin ?? (() => {});
     this.onLose = options.onLose ?? (() => {});
@@ -1902,33 +1904,15 @@ export class Game {
   }
 
   #drawBackground(ctx) {
-    const cam = this.camera;
-    const gradient = ctx.createLinearGradient(0, 0, 0, VIEW_H);
-    gradient.addColorStop(0, shade(this.level.background, 18));
-    gradient.addColorStop(1, shade(this.level.background, -14));
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-
-    // Parallax skyline. Deterministic from the column index, so it doesn't
-    // shimmer as the camera moves.
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    const parallax = cam.x * 0.35;
-    for (let i = 0; i < 26; i++) {
-      const seed = (i * 9301 + 49297) % 233280 / 233280;
-      const w = 60 + seed * 70;
-      const h = 90 + seed * 230;
-      const x = ((i * 150 - parallax) % (VIEW_W + 400) + VIEW_W + 400) % (VIEW_W + 400) - 200;
-      ctx.fillRect(x, VIEW_H - h, w, h);
-    }
-
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    const starParallax = cam.y * 0.2;
-    for (let i = 0; i < 40; i++) {
-      const seed = (i * 4177 + 7919) % 10007 / 10007;
-      const x = (i * 97) % VIEW_W;
-      const y = ((seed * VIEW_H * 2 - starParallax) % VIEW_H + VIEW_H) % VIEW_H;
-      ctx.fillRect(x, y, 2, 2);
-    }
+    // Backdrops live in their own module and draw in screen space with the
+    // camera passed in as parallax, so none of this can touch the simulation.
+    this.backdrop(ctx, {
+      cam: this.camera,
+      time: this.worldTime,
+      base: this.level.background,
+      shadeColor: shade,
+      reducedFlash: this.reducedFlash,
+    });
   }
 
   #drawPlatforms(ctx) {

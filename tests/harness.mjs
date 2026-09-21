@@ -44,6 +44,7 @@ function makeContext() {
     fill: record('fill'), stroke: record('stroke'), clip: record('clip'),
     fillText: record('fillText'), setLineDash: record('setLineDash'),
     createLinearGradient: () => ({ addColorStop: noop }),
+    createRadialGradient: () => ({ addColorStop: noop }),
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
   };
   return ctx;
@@ -81,6 +82,7 @@ function makeNullContext() {
     globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
     font: '', textAlign: '', textBaseline: '', shadowColor: '', shadowBlur: 0,
     createLinearGradient: () => ({ addColorStop: noop }),
+    createRadialGradient: () => ({ addColorStop: noop }),
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
   };
   for (const name of [

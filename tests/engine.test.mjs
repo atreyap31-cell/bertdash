@@ -440,3 +440,50 @@ test('every level is reachable from the level select', () => {
   assert.deepEqual(ids, [...Array(LEVELS.length).keys()],
     `level ids should be 0..${LEVELS.length - 1} in order`);
 });
+
+
+// --- backdrops -------------------------------------------------------------
+// They are decoration drawn in screen space. The only things worth pinning are
+// that every level gets one, that they cannot reach the simulation, and that
+// they actually move — the whole point was that every level looked the same.
+
+test('every level resolves to a backdrop, and they are not all the same one', async () => {
+  const { backdropFor } = await import('../js/engine/backdrop.js');
+  const { LEVELS, TRAINING } = await import('../js/data/levels.js');
+
+  const used = new Set();
+  for (const level of [...LEVELS, ...TRAINING]) {
+    const fn = backdropFor(level);
+    assert.equal(typeof fn, 'function', `level ${level.id} has no backdrop`);
+    used.add(fn.name);
+  }
+  assert.ok(used.size >= 5,
+    `the campaign should not all share one backdrop, saw ${[...used].join(', ')}`);
+});
+
+test('a backdrop cannot change the run', () => {
+  // Same inputs, same level, two different backdrops forced: the player must
+  // end up in exactly the same place.
+  const run = async (name) => {
+    const { BACKDROPS } = await import('../js/engine/backdrop.js');
+    const { game } = boot();
+    game.backdrop = BACKDROPS[name];
+    keys.down('KeyD');
+    advance(90);
+    keys.up('KeyD');
+    const at = { x: game.player.x, y: game.player.y, vx: game.player.vx };
+    game.destroy();
+    return at;
+  };
+  return Promise.all([run('city'), run('space')]).then(([a, b]) => {
+    assert.deepEqual(a, b, 'the backdrop must not touch the simulation');
+  });
+});
+
+test('an unknown backdrop name falls back rather than throwing', async () => {
+  const { backdropFor } = await import('../js/engine/backdrop.js');
+  const fn = backdropFor({ id: 3, theme: 'horizontal', backdrop: 'not-a-real-one' });
+  assert.equal(typeof fn, 'function');
+  // Custom levels have string ids and no campaign position at all.
+  assert.equal(typeof backdropFor({ id: 'custom-123', theme: 'vertical' }), 'function');
+});

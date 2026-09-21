@@ -146,6 +146,35 @@ track always plays back exactly what happened.
 Playback interpolates between recorded frames rather than picking the nearest
 one, so it stays smooth at any speed.
 
+### Backdrops
+
+Every level used to draw the same thing — a vertical gradient, one parallax
+skyline and a scatter of static dots, recoloured per level. Sixty-two levels
+looked like one level in sixty-two colours.
+
+There are now six that move, picked by where a level sits in the campaign:
+streets with windows lighting and going dark, a factory with smoke climbing off
+the chimneys and a furnace glow, a tower interior with lifts running and light
+sweeping the columns, cloud banks drifting at three depths, a parallax
+starfield with a nebula and a planet, and a neon perspective grid with falling
+code.
+
+They draw in screen space with the camera passed in as parallax, so none of it
+depends on level geometry and none of it can reach the simulation — there is a
+test for that. Everything is derived from an index rather than stored, so a
+backdrop costs the same on frame 10,000 as on frame one and a replay looks
+exactly like the run did. Reduced flashing settles the windows, dims the smoke
+and stops the stars twinkling.
+
+They are deliberately dim. The first cut had the city's windows at full
+strength and the platforms got lost in the skyline.
+
+### Rendering
+
+The canvas backing store is sized to the display's real pixels, capped at 3x.
+Drawing still happens in a fixed 800x600 space and the base transform does the
+scaling, so nothing downstream has to know about it.
+
 ### Speedrun mode
 
 Turn it on in Settings and **Start Shift** runs the whole campaign against one
@@ -179,7 +208,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-154 tests across seven suites:
+157 tests across seven suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
