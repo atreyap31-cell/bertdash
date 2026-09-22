@@ -146,3 +146,22 @@ Its blind spot is worth knowing: it reasons about rises and gaps between
 landing surfaces, so it cannot see the difficulty of steering through a moving
 slot on the way down. DOWN THE WELL scores 20 and plays a good deal harder
 than that.
+
+## `unspike.mjs`
+
+Leaves somewhere to land on platforms that are entirely covered in spikes.
+
+FREE FALL had eleven of them — every surface for 3,100px was lethal, so the
+level was one unbroken fall threading twelve alternating slots. Measured in the
+engine, the 260px between its rows buys about 430px of sideways reach, and it
+asked for 520. It was not hard, it was impossible, and the route search never
+noticed because it treats hazards as thin air.
+
+The repair computes where each platform sits under the opening in the row
+above — which is where you actually arrive, having walked off that row's lip —
+and leaves that zone clear.
+
+```bash
+node tools/unspike.mjs          # dry run
+node tools/unspike.mjs --write
+```

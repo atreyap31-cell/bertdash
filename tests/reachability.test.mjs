@@ -182,3 +182,32 @@ test('no two solid platforms are embedded in each other', () => {
   }
   assert.deepEqual(problems, [], `\n${problems.slice(0, 10).join('\n')}`);
 });
+
+test('no platform is entirely covered by something lethal', () => {
+  // A surface buried under spikes is not a surface. FREE FALL had eleven of
+  // them: every landing for 3,100px was lethal, so the level was one unbroken
+  // fall threading twelve alternating slots. Measured in the engine, the 260px
+  // between its rows buys about 430px of sideways reach and it asked for 520 —
+  // it was not hard, it was impossible.
+  //
+  // The route search cannot see this: it treats hazards as thin air.
+  // tools/unspike.mjs repairs anything this catches.
+  const LETHAL = new Set(['spike', 'laser']);
+  const problems = [];
+
+  for (const raw of ALL) {
+    const level = prepareLevel(raw);
+    for (const plat of level.platforms) {
+      if (!isSolidType(plat.type) || plat.type === 'moving') continue;
+      if (plat.width < 260) continue;      // too small to be a landing anyway
+      const covered = level.platforms.some(q => LETHAL.has(q.type)
+        && q.x <= plat.x + 2 && q.x + q.width >= plat.x + plat.width - 2
+        && q.y + q.height >= plat.y - 6 && q.y <= plat.y + 8);
+      if (covered) {
+        problems.push(`level ${raw.id} "${raw.title}": the ${plat.width}px platform `
+          + `at (${plat.x},${plat.y}) is completely covered in hazard`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], `\n${problems.slice(0, 10).join('\n')}`);
+});
