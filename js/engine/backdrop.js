@@ -22,6 +22,21 @@ const rand2 = i => ((i * 4177 + 7919) % 10007) / 10007;
 /** Wraps a value into [0, span) so a layer scrolls forever. */
 const wrap = (v, span) => ((v % span) + span) % span;
 
+/**
+ * How strongly a dark overlay may be drawn over this level's colour.
+ *
+ * The backdrops shade themselves with black at fixed alpha, which is invisible
+ * over a dark navy and a hard grid over a bright one. ROOF GARDEN is a bright
+ * green and SKYBRIDGE a bright cyan, and on both the bands and columns came
+ * out as a wall of coloured blocks with the platforms lost inside it.
+ */
+function overlayScale(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  if (!Number.isFinite(n)) return 1;
+  const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+  return 1 - Math.min(0.8, lum * 2.2);
+}
+
 function sky(ctx, top, bottom) {
   const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
   g.addColorStop(0, top);
@@ -36,8 +51,9 @@ function sky(ctx, top, bottom) {
 function city(ctx, { cam, time, shadeColor, base, reducedFlash }) {
   sky(ctx, shadeColor(base, 22), shadeColor(base, -18));
 
-  for (const layer of [{ depth: 0.2, tint: 'rgba(0,0,0,0.18)', step: 190, tall: 300, lit: false },
-                       { depth: 0.42, tint: 'rgba(0,0,0,0.45)', step: 150, tall: 230, lit: true }]) {
+  const dim = overlayScale(base);
+  for (const layer of [{ depth: 0.2, tint: `rgba(0,0,0,${(0.18 * dim).toFixed(3)})`, step: 190, tall: 300, lit: false },
+                       { depth: 0.42, tint: `rgba(0,0,0,${(0.45 * dim).toFixed(3)})`, step: 150, tall: 230, lit: true }]) {
     const shift = cam.x * layer.depth;
     ctx.fillStyle = layer.tint;
     for (let i = 0; i < 24; i++) {
@@ -117,21 +133,24 @@ function industrial(ctx, { cam, time, shadeColor, base, reducedFlash }) {
 function tower(ctx, { cam, time, shadeColor, base }) {
   sky(ctx, shadeColor(base, 16), shadeColor(base, -16));
 
+  // Halved, and damped again on a light background. At the old strength this
+  // read as a grid of solid blocks rather than as a room behind the level.
+  const dim = overlayScale(base);
   const shift = cam.y * 0.45;
-  const step = 120;
-  for (let i = 0; i < 8; i++) {
+  const step = 160;
+  for (let i = 0; i < 6; i++) {
     const y = wrap(i * step - shift, VIEW_H + step) - step;
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillStyle = `rgba(0,0,0,${(0.11 * dim).toFixed(3)})`;
     ctx.fillRect(0, y, VIEW_W, 46);
-    ctx.fillStyle = 'rgba(148,163,184,0.12)';
+    ctx.fillStyle = `rgba(148,163,184,${(0.08 * dim).toFixed(3)})`;
     ctx.fillRect(0, y + 46, VIEW_W, 2);
   }
 
   // Structural columns, moving with horizontal parallax.
   const sideShift = cam.x * 0.3;
-  ctx.fillStyle = 'rgba(0,0,0,0.26)';
-  for (let i = 0; i < 8; i++) {
-    const x = wrap(i * 180 - sideShift, VIEW_W + 360) - 180;
+  ctx.fillStyle = `rgba(0,0,0,${(0.12 * dim).toFixed(3)})`;
+  for (let i = 0; i < 6; i++) {
+    const x = wrap(i * 260 - sideShift, VIEW_W + 520) - 260;
     ctx.fillRect(x, 0, 26, VIEW_H);
   }
 
@@ -292,6 +311,9 @@ function cyber(ctx, { cam, time, shadeColor, base, reducedFlash }) {
 
 const BACKDROPS = { city, industrial, tower, sky: clouds, space, cyber };
 
+/** Levels in the tower act that are actually outside. */
+const OUTDOORS = new Set([18, 19, 21]);
+
 /**
  * Which backdrop a level gets.
  *
@@ -305,6 +327,11 @@ export function backdropFor(level) {
 
   const id = typeof level.id === 'number' ? level.id : null;
   if (id == null) return level.theme === 'vertical' ? tower : city;
+
+  // A few of these are outdoors despite sitting in the tower act. A roof
+  // garden and a skybridge are not rooms, and giving them an interior put a
+  // grid of columns across a bright green and a bright cyan.
+  if (OUTDOORS.has(id)) return clouds;
 
   if (id <= 9) return city;
   if (id <= 15) return industrial;

@@ -349,6 +349,15 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
   padding: 9px 14px;
 }
 .hud__panel--status { gap: 10px; }
+/* The level name and the bag's state sat directly against each other, so the
+   HUD read "ROOF GARDENIN HAND". */
+.hud__status {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
 .hud__title {
   font-size: 0.7rem;
   font-weight: 800;

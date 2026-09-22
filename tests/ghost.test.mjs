@@ -258,3 +258,46 @@ test('an unreadable or missing run converts to nothing rather than throwing', ()
   assert.equal(ghostToReel({ samples: [] }), null);
   assert.equal(ghostToReel(undefined), null);
 });
+
+test('a replay carries speed and whatever you were riding', async () => {
+  const { GHOST_RATE: rate } = await import('../js/services/ghost.js');
+  // A run that moves, on a bike.
+  const frames = [];
+  for (let i = 0; i < 200; i++) {
+    frames.push({
+      x: 100 + i * 6, y: 400, fx: 130 + i * 6, fy: 384,
+      face: true, slide: false, dive: i > 60 && i < 90, wall: false, wallDir: 1,
+      hasFood: true, fair: false, veh: i > 100 ? 'bike' : null, t: i * (1000 / 60),
+    });
+  }
+  const reel = ghostToReel(decodeGhost(encodeGhost(frames, 0)));
+
+  // Velocity is reconstructed from the gap to the next sample, not stored.
+  const moving = reel.frames[5];
+  assert.ok(moving.vx > 0, `a moving frame should carry speed, got ${moving.vx}`);
+  assert.ok(Math.abs(moving.vx - 6) < 2,
+    `reconstructed speed should be about the real 6px/frame, got ${moving.vx.toFixed(1)}`);
+
+  // The vehicle survives the round trip.
+  assert.equal(reel.frames[2].veh, null, 'on foot at the start');
+  assert.ok(reel.frames.some(f => f.veh === 'bike'), 'the bike has to come back');
+  assert.equal(rate, 30);
+});
+
+test('a ghost saved in the old format still plays', () => {
+  // Format 1 had no vehicle byte. Those saves must not be thrown away.
+  const recorder = record(200);
+  const bytes = encodeGhost(recorder.frames, recorder.dropped);
+  const v1 = new Uint8Array(4 + ((bytes.length - 4) / 10) * 9);
+  v1.set(bytes.subarray(0, 4));
+  v1[0] = 1;
+  const count = new DataView(bytes.buffer).getUint16(2, true);
+  for (let i = 0; i < count; i++) {
+    v1.set(bytes.subarray(4 + i * 10, 4 + i * 10 + 9), 4 + i * 9);
+  }
+  const old = decodeGhost(v1);
+  assert.ok(old, 'an old save should still decode');
+  assert.equal(old.samples.length, count);
+  assert.equal(old.samples[0].veh, null, 'with no vehicle, which is how it always played');
+  assert.ok(ghostToReel(old), 'and still convert to a replay');
+});

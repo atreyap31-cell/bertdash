@@ -14,9 +14,12 @@
 export const GHOST_RATE = 30;
 
 const KEY_PREFIX = 'bertdash.ghost.v1.';
-const BYTES_PER_SAMPLE = 9;
+const BYTES_PER_SAMPLE = 10;
 const HEADER_BYTES = 4;
-const FORMAT = 1;
+// 2 added a second flags byte. Format 1 ghosts are still read: they simply
+// have no vehicle recorded, which is how they already played back.
+const FORMAT = 2;
+const FORMAT_V1_BYTES = 9;
 
 /** Beyond this a run is long enough that the recording has dropped its start. */
 const MAX_SAMPLES = 60 * GHOST_RATE * 8;   // eight minutes
@@ -29,6 +32,10 @@ const WALL = 1 << 3;
 const WALL_RIGHT = 1 << 4;
 const HAS_FOOD = 1 << 5;
 const FOOD_AIR = 1 << 6;
+
+// Second byte: which vehicle was being ridden, if any.
+const VEHICLE = { none: 0, bike: 1, car: 2 };
+const VEHICLE_NAME = ['', 'bike', 'car'];
 
 /**
  * Positions are stored as int16. Levels are a few thousand pixels at most, but
@@ -84,6 +91,7 @@ export function encodeGhost(frames, dropped = 0) {
       | (f.wallDir > 0 ? WALL_RIGHT : 0)
       | (f.hasFood ? HAS_FOOD : 0)
       | (f.fair ? FOOD_AIR : 0));
+    view.setUint8(at + 9, VEHICLE[f.veh] ?? VEHICLE.none);
   });
   return bytes;
 }
@@ -92,15 +100,17 @@ export function encodeGhost(frames, dropped = 0) {
 export function decodeGhost(bytes) {
   if (!bytes || bytes.length < HEADER_BYTES) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint8(0) !== FORMAT) return null;
+  const version = view.getUint8(0);
+  if (version !== FORMAT && version !== 1) return null;
 
   const rate = view.getUint8(1) || GHOST_RATE;
   const count = view.getUint16(2, true);
-  if (bytes.length < HEADER_BYTES + count * BYTES_PER_SAMPLE) return null;
+  const stride = version === 1 ? FORMAT_V1_BYTES : BYTES_PER_SAMPLE;
+  if (bytes.length < HEADER_BYTES + count * stride) return null;
 
   const samples = new Array(count);
   for (let i = 0; i < count; i++) {
-    const at = HEADER_BYTES + i * BYTES_PER_SAMPLE;
+    const at = HEADER_BYTES + i * stride;
     const flags = view.getUint8(at + 8);
     samples[i] = {
       x: view.getInt16(at, true),
@@ -114,6 +124,7 @@ export function decodeGhost(bytes) {
       wallDir: (flags & WALL_RIGHT) !== 0 ? 1 : -1,
       hasFood: (flags & HAS_FOOD) !== 0,
       fair: (flags & FOOD_AIR) !== 0,
+      veh: version === 1 ? null : (VEHICLE_NAME[view.getUint8(at + 9)] || null),
     };
   }
   return { rate, samples };
@@ -202,16 +213,24 @@ export function ghostToReel(ghost) {
   if (!ghost?.samples?.length) return null;
   const step = 1000 / ghost.rate;
 
-  const frames = ghost.samples.map((s, i) => ({
-    x: s.x, y: s.y, w: 32, h: s.slide ? 26 : 48,
-    face: s.face, slide: s.slide, dive: s.dive, wall: s.wall, wallDir: s.wallDir,
-    // Velocity only feeds the dive trail, and the recording does not carry it.
-    vx: 0, vy: 0, veh: null,
-    shield: false, magnet: false, speed: false, jump: false,
-    hasFood: s.hasFood,
-    fx: s.fx, fy: s.fy, fair: s.fair,
-    t: i * step, flow: 0,
-  }));
+  // Velocity is not stored, but it does not need to be: it is the distance to
+  // the next sample. Leaving it at zero was what made replays look wrong —
+  // a dive drew no trail, so a dive across a gap replayed as the courier
+  // sliding through the air doing nothing.
+  const per = 60 / ghost.rate;   // engine frames between two samples
+  const frames = ghost.samples.map((s, i) => {
+    const next = ghost.samples[Math.min(i + 1, ghost.samples.length - 1)];
+    return {
+      x: s.x, y: s.y, w: 32, h: s.slide ? 26 : 48,
+      face: s.face, slide: s.slide, dive: s.dive, wall: s.wall, wallDir: s.wallDir,
+      vx: (next.x - s.x) / per, vy: (next.y - s.y) / per,
+      veh: s.veh ?? null,
+      shield: false, magnet: false, speed: false, jump: false,
+      hasFood: s.hasFood,
+      fx: s.fx, fy: s.fy, fair: s.fair,
+      t: i * step, flow: 0,
+    };
+  });
 
   return {
     frames,

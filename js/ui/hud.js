@@ -62,7 +62,7 @@ export class Hud {
           stat('Best', 'best'),
         ]),
         el('div.hud__panel.hud__panel--status', [
-          el('div', [
+          el('div.hud__status', [
             el('span.hud__title', options.levelTitle ?? ''),
             (this.foodEl = el('span.food-status', 'IN HAND')),
             el('div.charge-bar', [this.chargeFill]),
@@ -146,7 +146,7 @@ export class Hud {
     const tone = lead > 40 ? 'ahead' : lead < -40 ? 'behind' : 'level';
     if (this.ghostEl.dataset.tone !== tone) this.ghostEl.dataset.tone = tone;
 
-    const text = tone === 'level' ? 'LEVEL WITH BEST'
+    const text = tone === 'level' ? 'DEAD EVEN WITH BEST'
       : `${lead > 0 ? '+' : '−'}${Math.abs(Math.round(lead))} vs BEST`;
     if (this.ghostEl.textContent !== text) this.ghostEl.textContent = text;
   }

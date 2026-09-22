@@ -1673,7 +1673,9 @@ export class Game {
     p.buffs.magnet = f.magnet ? 1 : 0;
     p.buffs.speed = f.speed ? 1 : 0;
     p.buffs.jump = f.jump ? 1 : 0;
-    p.vehicle = null;          // vehicles are drawn from the level, not ridden
+    // A run that used a bike or a car has to replay on it; without this the
+    // courier glided along at vehicle speed with nothing under them.
+    p.vehicle = f.veh ? { type: f.veh } : null;
     this.food.x = f.fx;
     this.food.y = f.fy;
     this.food.airborne = f.fair;
