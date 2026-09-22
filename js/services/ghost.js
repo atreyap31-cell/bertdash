@@ -182,6 +182,46 @@ export function hasGhost(levelId) {
   }
 }
 
+/** Every level with a saved best run, as its level id. */
+export function listGhosts() {
+  return ghostKeys().map(key => key.slice(KEY_PREFIX.length));
+}
+
+/**
+ * Turns a saved best run into something the replay player can show.
+ *
+ * The ghost track already holds everything a replay needs to draw — where you
+ * and the bag were, which way you faced, whether you were sliding, diving or
+ * on a wall — so best runs are stored once and used for both. The fields the
+ * ghost leaves out are either derivable (the player's height follows from
+ * sliding) or purely cosmetic (buffs, flow), and a replay is decoration.
+ *
+ * @returns {{frames: Array, clips: Array, marks: Array, rate: number}|null}
+ */
+export function ghostToReel(ghost) {
+  if (!ghost?.samples?.length) return null;
+  const step = 1000 / ghost.rate;
+
+  const frames = ghost.samples.map((s, i) => ({
+    x: s.x, y: s.y, w: 32, h: s.slide ? 26 : 48,
+    face: s.face, slide: s.slide, dive: s.dive, wall: s.wall, wallDir: s.wallDir,
+    // Velocity only feeds the dive trail, and the recording does not carry it.
+    vx: 0, vy: 0, veh: null,
+    shield: false, magnet: false, speed: false, jump: false,
+    hasFood: s.hasFood,
+    fx: s.fx, fy: s.fy, fair: s.fair,
+    t: i * step, flow: 0,
+  }));
+
+  return {
+    frames,
+    dropped: 0,
+    marks: [],
+    rate: ghost.rate,
+    clips: [{ label: '', kind: 'run', at: 0, from: 0, to: frames.length - 1 }],
+  };
+}
+
 export function clearGhosts() {
   try {
     for (const key of ghostKeys()) localStorage.removeItem(key);

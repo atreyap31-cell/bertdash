@@ -2,7 +2,7 @@
 // between them.
 
 import { el, toast, formatTime } from './ui/dom.js';
-import { renderMenu, renderLevelSelect, renderTraining, renderWorkshop, renderResult, openPause } from './ui/screens.js';
+import { renderMenu, renderLevelSelect, renderTraining, renderWorkshop, renderReplays, renderResult, openPause } from './ui/screens.js';
 import { Hud } from './ui/hud.js';
 import { InputDisplay } from './ui/inputs.js';
 import { Editor } from './ui/editor.js';
@@ -13,7 +13,7 @@ import { computeParTime, starsForTime } from './engine/level.js';
 import { LEVELS, CAMPAIGN_LENGTH } from './data/levels.js';
 import { SKINS, VIEW_W, VIEW_H } from './data/config.js';
 import { profile } from './services/profile.js';
-import { encodeGhost, saveGhost, loadGhost } from './services/ghost.js';
+import { encodeGhost, saveGhost, loadGhost, ghostToReel } from './services/ghost.js';
 import { audio } from './services/audio.js';
 
 class App {
@@ -87,6 +87,7 @@ class App {
     if (this.screen === 'menu') view = renderMenu(this);
     else if (this.screen === 'levels') view = renderLevelSelect(this);
     else if (this.screen === 'training') view = renderTraining(this);
+    else if (this.screen === 'replays') view = renderReplays(this);
     else if (this.screen === 'workshop') view = renderWorkshop(this);
     else if (this.screen === 'result') view = renderResult(this, this.lastResult);
     else view = renderMenu(this);
@@ -432,6 +433,40 @@ class App {
     this.#teardownGame();
     this.screen = 'result';
     this.#paint();
+  }
+
+  /** Plays back the saved best run for a level. */
+  watchReplay(levelId) {
+    const ghost = loadGhost(levelId);
+    const reel = ghostToReel(ghost);
+    if (!reel) { toast('That replay could not be read', { tone: 'warn' }); return; }
+
+    const level = LEVELS.find(l => String(l.id) === String(levelId))
+      ?? TRAINING.find(t => t.id === levelId)
+      ?? profile.get().customLevels.find(c => c.id === levelId);
+    if (!level) { toast('That level is gone', { tone: 'warn' }); return; }
+
+    this.#teardownGame();
+    const p = profile.get();
+    const skin = SKINS.find(s => s.id === p.equippedSkin) ?? SKINS[0];
+
+    const player = new ReplayReel({
+      level,
+      skin,
+      reel,
+      result: { timeMs: p.bestLevelTimes[String(levelId)] ?? 0 },
+      reducedFlash: p.settings.reducedFlash === true,
+      // Saved runs are kept at 30Hz to fit in storage; playing them a frame at
+      // a time would run the level at double speed.
+      speed: (reel.rate ?? 30) / 60,
+      label: 'BEST RUN',
+      onDone: () => this.show('replays'),
+    });
+    this.reel = player;
+    this.screen = 'replay';
+    this.#unbindResultKeys();
+    this.root.replaceChildren(el('div.screen.screen--play', [player.root]));
+    player.start();
   }
 
   // --- editor --------------------------------------------------------------

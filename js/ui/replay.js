@@ -18,9 +18,13 @@ export class ReplayReel {
   /**
    * @param {object} options { level, skin, reel, result, reducedFlash, onDone }
    */
-  constructor({ level, skin, reel, result, reducedFlash, onDone }) {
+  constructor({ level, skin, reel, result, reducedFlash, onDone, speed = 1, label = null }) {
     this.reel = { ...reel, index: 0 };
     this.result = result;
+    // A saved best run is stored at 30Hz, so it plays at half a frame per
+    // frame. Live reels are recorded at 60 and play at one.
+    this.speed = speed;
+    this.caption = label;
     this.onDone = onDone;
     this.finished = false;
 
@@ -62,7 +66,7 @@ export class ReplayReel {
   start() {
     addEventListener('keydown', this.onKey);
     // Played back as it happened: no slow motion, no push-in.
-    this.game.replaySpeed = 1;
+    this.game.replaySpeed = this.speed;
     this.game.replayZoom = 1;
     this.game.start();
     this.game.snapCamera();
@@ -76,7 +80,7 @@ export class ReplayReel {
     const clip = this.reel.clips[this.reel.index];
     if (!clip) return;
 
-    const shown = this.game.replayLabel ?? '';
+    const shown = this.caption ?? this.game.replayLabel ?? '';
     if (this.label.textContent !== shown) {
       this.label.textContent = shown;
       this.label.classList.toggle('is-in', shown !== '');

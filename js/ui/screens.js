@@ -4,6 +4,7 @@ import { el, modal, toast, confirmDialog, formatTime, formatMoney } from './dom.
 import { SKINS, GEAR, GEAR_TIERS, ACHIEVEMENTS, ACTIONS, keyName, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
 import { LEVELS, TRAINING, CAMPAIGN_LENGTH } from '../data/levels.js';
 import { profile } from '../services/profile.js';
+import { listGhosts } from '../services/ghost.js';
 import { audio } from '../services/audio.js';
 import { peer } from '../services/net.js';
 
@@ -58,6 +59,7 @@ export function renderMenu(app) {
         tile('Trophies', `${p.unlockedAchievements.length} earned`, () => openTrophies()),
         tile('BertNet', 'Play alongside a friend', () => openHub()),
         tile('Training', `${TRAINING.length} lessons`, () => app.show('training')),
+        tile('Replays', `${listGhosts().length} saved`, () => app.show('replays')),
         tile('Settings', 'Sound, data, name', () => openSettings(app)),
       ]),
       el('footer.menu__foot', [
@@ -131,6 +133,61 @@ export function renderTraining(app) {
           + 'cannot be finished without it. Work through them in order the first time — '
           + 'the later campaign levels assume all of it.'),
         el('div.lessons', cards),
+      ]),
+    ]),
+  ]);
+}
+
+// --- replays ---------------------------------------------------------------
+
+/**
+ * Every best run you have saved, to watch back.
+ *
+ * These are the same tracks the in-level ghost races you against, so a best
+ * time is recorded once and serves both.
+ */
+export function renderReplays(app) {
+  const p = profile.get();
+  const saved = listGhosts();
+
+  const named = id => {
+    const level = LEVELS.find(l => String(l.id) === id);
+    if (level) return { title: level.title, label: `Level ${level.id}` };
+    const lesson = TRAINING.find(t => t.id === id);
+    if (lesson) return { title: lesson.title, label: 'Training' };
+    const custom = p.customLevels.find(c => c.id === id);
+    if (custom) return { title: custom.title || 'Untitled', label: 'Custom' };
+    return null;
+  };
+
+  const rows = saved
+    .map(id => ({ id, ...named(id), best: p.bestLevelTimes[id] }))
+    .filter(row => row.title)
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)) || a.title.localeCompare(b.title))
+    .map(row => el('button.replay-row', {
+      onclick: () => { audio.click(); app.watchReplay(row.id); },
+    }, [
+      el('div.replay-row__body', [
+        el('span.replay-row__title', row.title),
+        el('span.replay-row__where', row.label),
+      ]),
+      el('span.replay-row__time', row.best != null ? formatTime(row.best) : '—'),
+      el('span.replay-row__play', '▶'),
+    ]));
+
+  return el('div.screen', [
+    el('div.panel', [
+      el('header.panel__head', [
+        el('h2.panel__title', 'Replays'),
+        el('button.btn.btn--ghost', { onclick: () => app.show('menu') }, 'Back'),
+      ]),
+      el('div.panel__body', [
+        el('p.hub__note', rows.length
+          ? 'Your best run on each level, saved as you set it. These are the same '
+            + 'runs the ghost races you against while you play.'
+          : 'Nothing here yet. Finish a level and your best run is kept, to watch '
+            + 'back here and to race as a ghost while you play.'),
+        rows.length ? el('div.replays', rows) : null,
       ]),
     ]),
   ]);

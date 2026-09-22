@@ -11,6 +11,7 @@ const { Game } = await import('../js/engine/game.js');
 const { Recorder } = await import('../js/engine/recorder.js');
 const {
   encodeGhost, decodeGhost, saveGhost, loadGhost, hasGhost, clearGhosts, GHOST_RATE,
+  listGhosts, ghostToReel,
 } = await import('../js/services/ghost.js');
 
 const FLOOR_Y = 500;
@@ -211,4 +212,49 @@ test('no ghost means no readout rather than a zero', () => {
   advance(30);
   assert.equal(game.getHudState().ghostLead, null);
   game.destroy();
+});
+
+// --- watching a saved run --------------------------------------------------
+
+test('a saved best run lists itself and converts to something playable', () => {
+  clearGhosts();
+  const recorder = record(300);
+  assert.ok(saveGhost(12, encodeGhost(recorder.frames, recorder.dropped)));
+  assert.ok(saveGhost('t-air', encodeGhost(recorder.frames, recorder.dropped)));
+
+  const listed = listGhosts().sort();
+  assert.deepEqual(listed, ['12', 't-air'], 'both saved runs should be offered');
+
+  const reel = ghostToReel(loadGhost(12));
+  assert.ok(reel, 'a saved run should convert');
+  assert.equal(reel.clips.length, 1, 'one continuous take');
+  assert.equal(reel.clips[0].from, 0);
+  assert.equal(reel.clips[0].to, reel.frames.length - 1);
+  assert.equal(reel.rate, GHOST_RATE, 'the rate has to travel with it, or it plays at double speed');
+  clearGhosts();
+});
+
+test('a converted run carries everything the player needs to draw', () => {
+  clearGhosts();
+  const recorder = record(200);
+  const reel = ghostToReel(decodeGhost(encodeGhost(recorder.frames, recorder.dropped)));
+
+  for (const key of ['x', 'y', 'w', 'h', 'face', 'slide', 'dive', 'wall', 'wallDir',
+    'vx', 'vy', 'hasFood', 'fx', 'fy', 'fair', 't', 'flow']) {
+    assert.ok(key in reel.frames[0], `a replay frame needs ${key}`);
+  }
+  // Height follows from sliding rather than being stored.
+  const sliding = reel.frames.find(f => f.slide);
+  if (sliding) assert.ok(sliding.h < 48, 'a sliding frame should be short');
+  assert.equal(reel.frames[0].h, 48, 'a standing frame should be full height');
+
+  // The clock has to advance, or the replay never moves.
+  assert.ok(reel.frames[1].t > reel.frames[0].t);
+  clearGhosts();
+});
+
+test('an unreadable or missing run converts to nothing rather than throwing', () => {
+  assert.equal(ghostToReel(null), null);
+  assert.equal(ghostToReel({ samples: [] }), null);
+  assert.equal(ghostToReel(undefined), null);
 });
