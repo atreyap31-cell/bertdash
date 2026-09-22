@@ -109,3 +109,20 @@ The distinction matters because of a V8 access violation on this machine — see
 the comment at the top of the file for the evidence, including how the crash
 rate scales with how much work one process does. That measurement is why the
 fuzzing is split across two files.
+
+## `unoverlap.mjs`
+
+Separates solid platforms embedded in each other. A ledge buried in the side of
+a wall makes the collision resolver fight itself — it pushes the player out of
+the wall while the ledge holds them up, so standing there jitters. That is what
+PENTHOUSE RUN felt like.
+
+It trims the smaller piece back rather than moving it, because most of these
+are shelves deliberately anchored into a wall and sliding the shelf would
+change the level. A piece buried entirely inside another is redundant and is
+removed. It re-checks every level is still solvable before writing.
+
+```bash
+node tools/unoverlap.mjs          # dry run
+node tools/unoverlap.mjs --write
+```

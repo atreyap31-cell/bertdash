@@ -207,7 +207,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-157 tests across eight suites:
+158 tests across eight suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it

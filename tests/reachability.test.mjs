@@ -148,3 +148,32 @@ test('no level drops the player onto something lethal', () => {
   }
   assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
 });
+
+
+test('no two solid platforms are embedded in each other', () => {
+  // A ledge buried in the side of a wall makes the collision resolver fight
+  // itself: it pushes the player out of the wall while the ledge holds them
+  // up, so standing there jitters and snags. PENTHOUSE RUN had a ledge 10px
+  // into the bottom of a wall and read as glitchy because of it.
+  //
+  // Platforms that move are exempt — passing through things is what a lift
+  // does. tools/unoverlap.mjs repairs anything this catches.
+  const overlaps = (a, b) =>
+    a.x < b.x + b.width && a.x + a.width > b.x
+    && a.y < b.y + b.height && a.y + a.height > b.y;
+
+  const problems = [];
+  for (const raw of ALL) {
+    const level = prepareLevel(raw);
+    const solid = level.platforms.filter(p => isSolidType(p.type) && p.type !== 'moving');
+    for (let i = 0; i < solid.length; i++) {
+      for (let j = i + 1; j < solid.length; j++) {
+        if (!overlaps(solid[i], solid[j])) continue;
+        problems.push(`level ${raw.id} "${raw.title}": `
+          + `${solid[i].type} at (${solid[i].x},${solid[i].y}) overlaps `
+          + `${solid[j].type} at (${solid[j].x},${solid[j].y})`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], `\n${problems.slice(0, 10).join('\n')}`);
+});
