@@ -270,13 +270,21 @@ export function renderResult(app, result) {
   if (isWin && result.hasNext) {
     actions.push(el('button.btn.btn--primary.btn--lg', { onclick: () => app.playNext() }, 'Next level'));
   }
-  actions.push(el('button.btn.btn--lg' + (isWin && result.hasNext ? '.btn--ghost' : '.btn--primary'),
-    { onclick: () => app.retry() }, isWin ? 'Replay' : 'Try again'));
-  actions.push(el('button.btn.btn--lg.btn--ghost', { onclick: () => app.show('menu') }, 'Menu'));
+  // A dead run is not something you continue, so retrying the level stops
+  // being the obvious thing to do and the menu becomes the way out.
+  const runOver = !isWin && result.endedRun;
+  actions.push(el('button.btn.btn--lg'
+    + (isWin && result.hasNext ? '.btn--ghost' : runOver ? '.btn--ghost' : '.btn--primary'),
+    { onclick: () => app.retry() }, isWin ? 'Replay' : 'Try the level again'));
+  actions.push(el('button.btn.btn--lg' + (runOver ? '.btn--primary' : '.btn--ghost'),
+    { onclick: () => app.show('menu') }, 'Menu'));
 
   return el('div.screen.screen--result', [
     el(`div.result${isWin ? '.result--win' : '.result--lose'}`, [
       el('h2.result__head', isWin ? 'Delivered' : (FAIL_LABELS[result.reason] ?? 'Failed')),
+      !isWin && result.endedRun
+        ? el('p.result__runover', 'Speedrun over — a run is a single clean attempt')
+        : null,
       isWin ? stars(result.stars) : null,
       el('div.result__rows', [
         el('div.result__row', [el('span', 'Time'), el('b', formatTime(result.timeMs))]),
@@ -296,6 +304,11 @@ export function renderResult(app, result) {
         result.isNewBest ? el('div.result__row', [
           el('span', 'Personal best'),
           el('b.is-good', result.firstClear ? 'First clear' : 'New record'),
+        ]) : null,
+        result.endedRun ? el('div.result__row.result__row--run', [
+          el('span', `Run ended after ${result.endedRun.levels} `
+            + `level${result.endedRun.levels === 1 ? '' : 's'}`),
+          el('b', formatTime(result.endedRun.totalMs)),
         ]) : null,
         result.runSplit ? el('div.result__row.result__row--run', [
           el('span', result.runSplit.complete

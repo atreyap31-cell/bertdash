@@ -423,12 +423,22 @@ class App {
 
   #handleLose(reason) {
     // A death ends the run: a speedrun is a single clean attempt.
-    if (this.run) this.endRun('Speedrun ended \u2014 delivery failed');
+    //
+    // Say so on the results screen, not only in a toast. The screen used to
+    // show the level's time and a "Try again" button and nothing else, so a
+    // run ending looked exactly like any other failed attempt and you could
+    // carry on for several levels before noticing the clock had gone.
+    const endedRun = this.run
+      ? { levels: this.run.levels, totalMs: this.run.totalMs }
+      : null;
+    if (this.run) this.endRun('Speedrun over \u2014 delivery failed');
+
     this.lastResult = {
       outcome: 'lose',
       reason,
       timeMs: this.game?.elapsed ?? 0,
       parTime: this.game?.level.parTime ?? 0,
+      endedRun,
     };
     this.#teardownGame();
     this.screen = 'result';

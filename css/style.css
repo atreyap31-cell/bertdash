@@ -1307,3 +1307,13 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
 .replay-row__time { font-family: var(--mono); font-size: 0.9rem; color: var(--green); }
 .replay-row__play { color: var(--text-faint); font-size: 0.8rem; }
 .replay-row:hover .replay-row__play { color: var(--green); }
+
+
+/* A speedrun ending is not the same as failing a level, and has to look it. */
+.result__runover {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+}
