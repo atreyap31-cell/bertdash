@@ -24,7 +24,7 @@ const { prepareLevel, isSolidType } = await import('../js/engine/level.js');
 // The movement model lives in tools/reach.mjs, shared with tools/bag-audit.mjs
 // so the audit and this test can never disagree about what the player can do.
 const {
-  MOVES, surfaces, canReach, analyse,
+  MOVES, surfaces, canReach, analyse, surfaceUnder,
 } = await import('../tools/reach.mjs');
 
 const MAX_RISE = Math.max(...MOVES.map(m => m.rise));
@@ -70,10 +70,15 @@ test('no level asks for a rise that no move can clear', () => {
   for (const raw of ALL) {
     const level = prepareLevel(raw);
     const all = surfaces(level);
+    // The surface you start on never needs to be reachable — you are already
+    // standing on it. In a descent level that is the highest thing there is,
+    // and demanding a route up to it would be asking the player to climb back
+    // to the start.
+    const spawn = surfaceUnder(all, level.startPos.x, level.startPos.y);
     for (const s of all) {
       const reachable = all.some(other => other.i !== s.i && canReach(level, other, s));
       const isFloor = s.yBottom >= level.height - 220;
-      if (!reachable && !isFloor) {
+      if (!reachable && !isFloor && s.i !== spawn?.i) {
         problems.push(
           `level ${raw.id} "${raw.title}": surface at (${s.x1},${s.yTop}) is unreachable `
           + `(highest rise available is ${MAX_RISE}px)`);

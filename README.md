@@ -207,12 +207,12 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-165 tests across eight suites:
+167 tests across eight suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
   cannot be abused (no infinite air jumps, no free shields, no stuck crouch)
-- `fuzz` — drives all 62 levels and 8 lessons with pseudo-random input across three seeds
+- `fuzz` — drives all 68 levels and 8 lessons with pseudo-random input across three seeds
   (~61k simulated frames) and asserts the simulation never breaks its own
   rules: no NaN, no escaping the level, no clipping into solid geometry
 - `reachability` — builds a graph of every standable surface in all 46 levels

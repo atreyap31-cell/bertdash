@@ -724,6 +724,183 @@ NEW.push(level(61, 'DOUBLE SHIFT OVERTIME', 'All of it, back to back.', {
   hints: [
     hintZone(60, 820, 'Last shift. Nothing here is optional.', 560, 340),
   ],
+}));
+
+// --- overtime --------------------------------------------------------------
+//
+// Six levels past what used to be the finale, for when the campaign has stopped
+// asking anything. The difficulty pass (tools/difficulty.mjs) put the old run
+// at an average of 54 across its last eight levels while the hardest single
+// level in the game scored 83; these are built to sit up at that end rather
+// than tail off.
+//
+// Every rise here is deliberately 85-92% of the move that clears it, not 99%.
+// Tight is hard; frame-perfect is just unfair.
+
+// 62 — bag bounces strung together over a spike field, on a clock.
+NEW.push(level(62, 'NIGHT SHIFT', 'Throw, chase, catch. Do not stop.', {
+  width: 4200, height: 1300, theme: 'horizontal', background: '#0c0a1f',
+  startPos: { x: 90, y: 1052 }, foodPos: { x: 130, y: 1052 },
+  goalPos: { x: 4020, y: 360 },
+  platforms: [
+    solid(0, 1100, 620),
+    ledge(900, 820, 220),       // 280 up: bag bounce
+    ledge(1560, 820, 220),
+    ledge(2220, 540, 220),      // another 280
+    ledge(2880, 540, 220),
+    solid(3500, 440, 700, 860),
+    spikes(640, 1280, 240),
+    spikes(1140, 1280, 400),
+    spikes(1800, 1280, 400),
+    spikes(2460, 1280, 400),
+    spikes(3120, 1280, 360),
+    laser(1340, 560, 260, { interval: 1700, offset: 0 }),
+    laser(2000, 560, 260, { interval: 1700, offset: 560 }),
+    laser(2660, 280, 260, { interval: 1700, offset: 1120 }),
+  ],
+  powerups: [pickup('magnet', 960, 760), pickup('magnet', 2280, 480)],
+  hints: [hintZone(60, 700, 'Every shelf here is a bag bounce. The lasers do not wait.', 540, 320)],
+}));
+
+// 63 — a shaft climbed on kicks, with the landings crumbling under you.
+NEW.push(level(63, 'THE CHIMNEY', 'Kick up. Do not stand still.', {
+  width: 900, height: 3400, theme: 'vertical', background: '#140c0c',
+  startPos: { x: 420, y: 3232 }, foodPos: { x: 460, y: 3232 },
+  goalPos: { x: 450, y: 240 },
+  platforms: [
+    solid(0, 3280, 900, 120),
+    wall(120, 420, 2860, 60),
+    wall(720, 420, 2860, 60),
+    ...Array.from({ length: 6 }, (_, i) => vanish(i % 2 === 0 ? 220 : 480, 2900 - i * 470, 200)),
+    ledge(300, 380, 300),
+    solid(340, 300, 220, 40),
+  ],
+  physics: { wallSlideEnabled: true },
+  powerups: [pickup('shield', 440, 3200), pickup('magnet', 440, 1500)],
+  hints: [hintZone(80, 2900, 'The landings give way. Keep the climb going.', 640, 300)],
+}));
+
+// 64 — long jumps into a crosswind, which is the only level that makes you
+//      account for being pushed mid-flight.
+NEW.push(level(64, 'CROSSWIND', 'The wind takes a third of every jump.', {
+  width: 5200, height: 1100, theme: 'horizontal', background: '#07283a',
+  startPos: { x: 90, y: 852 }, foodPos: { x: 130, y: 852 },
+  goalPos: { x: 5020, y: 700 },
+  platforms: [
+    solid(0, 900, 700),
+    // Landings are 200 wide, not 320, and the gaps run to 640 — a long jump
+    // manages 712 with nothing pushing back, and the wind takes a chunk of it.
+    solid(1340, 900, 200),
+    solid(2180, 900, 200),
+    solid(3020, 900, 200),
+    solid(3860, 900, 1340),
+    solid(760, 680, 520, 60),     // low ceilings: slide into the long jump
+    solid(1600, 680, 520, 60),
+    solid(2440, 680, 520, 60),
+    spikes(720, 1080, 600),
+    spikes(1560, 1080, 600),
+    spikes(2400, 1080, 600),
+    spikes(3240, 1080, 600),
+    laser(1440, 620, 280, { interval: 1800, offset: 0 }),
+    laser(2280, 620, 280, { interval: 1800, offset: 600 }),
+    laser(3120, 620, 280, { interval: 1800, offset: 1200 }),
+  ],
+  physics: { windX: -1.6 },
+  powerups: [pickup('speed', 400, 840), pickup('shield', 2340, 840)],
+  hints: [hintZone(60, 540, 'Slide, then jump. The wind is against you the whole way.', 560, 320)],
+}));
+
+// 65 — doors on a cycle over conveyors, so the floor moves as well as the gaps.
+NEW.push(level(65, 'THE GRINDER', 'Timed doors, moving floor.', {
+  width: 4600, height: 1000, theme: 'horizontal', background: '#1a1206',
+  startPos: { x: 90, y: 752 }, foodPos: { x: 130, y: 752 },
+  goalPos: { x: 4420, y: 600 },
+  platforms: [
+    solid(0, 800, 640),
+    // Belts with holes in them: the floor moves and it runs out.
+    belt(760, 800, 520, 3.2),
+    belt(1460, 800, 520, -3.6),
+    belt(2160, 800, 520, 3.8),
+    solid(2860, 800, 1740),
+    door(1000, 520, 280, { interval: 2200, offset: 0 }),
+    door(1700, 520, 280, { interval: 2200, offset: 730 }),
+    door(2400, 520, 280, { interval: 2200, offset: 1460 }),
+    laser(3060, 520, 280, { interval: 1400, offset: 0 }),
+    laser(3400, 520, 280, { interval: 1400, offset: 350 }),
+    laser(3740, 520, 280, { interval: 1400, offset: 700 }),
+    laser(4080, 520, 280, { interval: 1400, offset: 1050 }),
+    spikes(640, 980, 2220),
+  ],
+  powerups: [pickup('shield', 400, 740), pickup('speed', 2900, 740)],
+  hints: [hintZone(60, 440, 'The belts fight you. Read the doors before you commit.', 560, 300)],
+}));
+
+// 66 — a descent, which the campaign otherwise barely uses: narrow landings
+//      with spikes either side and nothing to grab.
+NEW.push(level(66, 'DOWN THE WELL', 'Fall well, or not at all.', {
+  width: 1000, height: 3600, theme: 'vertical', background: '#04121c',
+  startPos: { x: 470, y: 232 }, foodPos: { x: 510, y: 232 },
+  goalPos: { x: 500, y: 3380 },
+  platforms: [
+    solid(300, 280, 400, 40),
+    // Each floor spans the shaft bar a 180px slot, alternating sides, so the
+    // way down is a steered weave rather than letting go. Spikes line the slot,
+    // which is what makes taking it at speed a decision.
+    ...Array.from({ length: 8 }, (_, i) => {
+      const y = 620 + i * 340;
+      const left = i % 2 === 0;
+      return left
+        ? [solid(240, y, 760, 30), spikes(60, y + 30, 180),
+           laser(190, y - 260, 250, { interval: 1600, offset: i * 380 })]
+        : [solid(0, y, 760, 30), spikes(760, y + 30, 180),
+           laser(810, y - 260, 250, { interval: 1600, offset: i * 380 })];
+    }).flat(),
+    solid(0, 3420, 1000, 180),
+  ],
+  powerups: [pickup('shield', 500, 560), pickup('magnet', 500, 1980)],
+  hints: [hintZone(80, 340, 'Down, not up. Every floor has one slot, and it moves.', 640, 300)],
+}));
+
+// 67 — the finale: one section of each of the five above, then Bert.
+NEW.push(level(67, 'DOUBLE OVERTIME', 'All of it, once more.', {
+  width: 7600, height: 1500, theme: 'horizontal', background: '#08060e',
+  startPos: { x: 90, y: 1252 }, foodPos: { x: 130, y: 1252 },
+  goalPos: { x: 7400, y: 420 },
+  platforms: [
+    solid(0, 1300, 640),
+    // bag bounce steps
+    ledge(920, 1020, 200),
+    ledge(1500, 740, 200),
+    spikes(660, 1480, 820),
+    // a kick shaft
+    wall(2100, 540, 700),
+    wall(2560, 540, 700),
+    ledge(2200, 1240, 320),
+    ledge(2220, 500, 300),
+    // wind crossing
+    solid(2960, 900, 300),
+    solid(3620, 900, 300),
+    solid(4280, 900, 300),
+    spikes(3280, 1480, 320),
+    spikes(3940, 1480, 320),
+    // belts and doors
+    belt(4700, 900, 620, 3.4),
+    belt(5320, 900, 620, -3.4),
+    door(4980, 620, 280, { interval: 2200, offset: 0 }),
+    door(5600, 620, 280, { interval: 2200, offset: 730 }),
+    // laser run to Bert
+    solid(6000, 500, 1600, 1000),
+    laser(6240, 220, 280, { interval: 1500, offset: 0 }),
+    laser(6620, 220, 280, { interval: 1500, offset: 500 }),
+    laser(7000, 220, 280, { interval: 1500, offset: 1000 }),
+  ],
+  physics: { wallSlideEnabled: true, windX: -1.2 },
+  powerups: [
+    pickup('magnet', 980, 960),
+    pickup('shield', 2260, 1180),
+    pickup('speed', 4740, 840),
+  ],
+  hints: [hintZone(60, 920, 'Overtime. Everything you have learned, back to back.', 560, 340)],
   isFinalLevel: true,
 }));
 
@@ -734,7 +911,12 @@ const source = readFileSync(levelsPath, 'utf8');
 
 const marker = 'export const LEVELS = ';
 const start = source.indexOf(marker) + marker.length;
-const end = source.indexOf(';\n', start);
+// Tolerant of CRLF: git rewrites this file with Windows line endings on
+// checkout, and slicing on a bare newline then cut the array short, leaving
+// JSON that would not parse.
+const crlfEnd = source.indexOf(';' + String.fromCharCode(13,10), start);
+const lfEnd = source.indexOf(';' + String.fromCharCode(10), start);
+const end = crlfEnd >= 0 && (lfEnd < 0 || crlfEnd < lfEnd) ? crlfEnd : lfEnd;
 const existing = JSON.parse(source.slice(start, end));
 
 // Drop anything this script generated before, so it can be re-run.

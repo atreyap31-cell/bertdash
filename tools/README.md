@@ -126,3 +126,23 @@ removed. It re-checks every level is still solvable before writing.
 node tools/unoverlap.mjs          # dry run
 node tools/unoverlap.mjs --write
 ```
+
+## `difficulty.mjs`
+
+Scores every campaign level so "too easy" and "too hard" become numbers you can
+act on. It combines four things: how close the hardest move on the route is to
+the limit of what that move can do, whether the route needs the bag or a wall
+climb, hazard and timing pressure, and par time.
+
+It then reports which levels sit furthest from the curve their position in the
+campaign implies.
+
+```bash
+node tools/difficulty.mjs --verbose
+node tools/difficulty.mjs --csv
+```
+
+Its blind spot is worth knowing: it reasons about rises and gaps between
+landing surfaces, so it cannot see the difficulty of steering through a moving
+slot on the way down. DOWN THE WELL scores 20 and plays a good deal harder
+than that.
