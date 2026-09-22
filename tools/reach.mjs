@@ -89,6 +89,67 @@ export function surfaces(level) {
     });
 }
 
+/** The player's width, i.e. the gap a route has to leave to be passable. */
+const PLAYER_W = 32;
+const SQUEEZE = PLAYER_W + 16;
+
+/**
+ * The narrowest clear horizontal gap anywhere in the corridor between two
+ * surfaces.
+ *
+ * A climb is not a climb if there is nowhere to put the player. THE SHAFT had
+ * landings spanning all but 40px of a 360px shaft, so every stage of it was a
+ * 560px wall climb through a slot eight pixels wider than the courier. The
+ * route search said it was fine, because it only ever asked whether the rise
+ * and the gap were within a move's reach.
+ */
+function narrowestGap(level, from, to) {
+  // Strictly between the two surfaces: each one blocks the corridor at its own
+  // height by definition, and the floor you are standing on is not an obstacle.
+  const top = Math.min(from.yTop, to.yTop) + 60;
+  const bottom = Math.max(from.yTop, to.yTop) - 60;
+  if (bottom - top < 40) return Infinity;
+
+  // The channel is between the walls being kicked off, not the whole level.
+  // Measuring wider than that counted the open floor either side of the shaft
+  // as room to climb, which is exactly the space a shaft does not have.
+  const mid = (Math.min(from.x1, to.x1) + Math.max(from.x2, to.x2)) / 2;
+  const walls = level.platforms.filter(q =>
+    isSolidType(q.type) && q.height > 100
+    && q.y < bottom && q.y + q.height > top);
+  const left = walls.filter(q => q.x + q.width <= mid)
+    .reduce((best, q) => Math.max(best, q.x + q.width), -Infinity);
+  const right = walls.filter(q => q.x >= mid)
+    .reduce((best, q) => Math.min(best, q.x), Infinity);
+
+  const lo = Number.isFinite(left) ? left : Math.min(from.x1, to.x1);
+  const hi = Number.isFinite(right) ? right : Math.max(from.x2, to.x2);
+  if (hi - lo < SQUEEZE) return hi - lo;
+
+  let narrowest = Infinity;
+  // Sample across the rise; a pinch anywhere in it blocks the whole route.
+  const steps = Math.min(40, Math.max(4, Math.round((bottom - top) / 40)));
+  for (let i = 0; i <= steps; i++) {
+    const y = top + ((bottom - top) * i) / steps;
+    const blocked = level.platforms
+      .filter(q => q !== from.piece && q !== to.piece)
+      .filter(q => isSolidType(q.type) && q.y <= y && q.y + q.height >= y
+        && q.x + q.width > lo && q.x < hi)
+      .map(q => [Math.max(lo, q.x), Math.min(hi, q.x + q.width)])
+      .sort((a, b) => a[0] - b[0]);
+
+    let cursor = lo;
+    let widest = 0;
+    for (const [a, b] of blocked) {
+      widest = Math.max(widest, a - cursor);
+      cursor = Math.max(cursor, b);
+    }
+    widest = Math.max(widest, hi - cursor);
+    narrowest = Math.min(narrowest, widest);
+  }
+  return narrowest;
+}
+
 export function spanGap(a, b) {
   if (a.x2 < b.x1) return b.x1 - a.x2;
   if (b.x2 < a.x1) return a.x1 - b.x2;
@@ -120,7 +181,10 @@ export function canReach(level, from, to, opts = {}) {
   const riseScale = 1 / gravity;
 
   if (rise <= 0) return gap <= Math.max(FALL_GAP, Math.max(...MOVES.map(m => m.gap)));
-  if (rise <= WALL_CLIMB * riseScale && wallBetween(level, from, to) && gap <= 420) return true;
+  if (rise <= WALL_CLIMB * riseScale && wallBetween(level, from, to) && gap <= 420) {
+    // A shaft you cannot fit up is not a route.
+    return narrowestGap(level, from, to) >= SQUEEZE;
+  }
 
   return MOVES.some(m =>
     (useBag || !m.bag)

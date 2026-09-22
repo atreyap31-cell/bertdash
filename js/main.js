@@ -80,6 +80,9 @@ class App {
   }
 
   #paint() {
+    // Whatever was on screen before is gone; so is any shortcut bound to it.
+    this.#unbindResultKeys();
+
     let view;
     if (this.screen === 'menu') view = renderMenu(this);
     else if (this.screen === 'levels') view = renderLevelSelect(this);
@@ -89,6 +92,39 @@ class App {
     else view = renderMenu(this);
 
     this.root.replaceChildren(view);
+    if (this.screen === 'result') this.#bindResultKeys();
+  }
+
+  /**
+   * Straight back in after a death.
+   *
+   * Dying and then having to find a button with the mouse is the worst part of
+   * a level you are learning. R, Space and Enter all go again; Escape backs
+   * out to the menu.
+   */
+  #bindResultKeys() {
+    const again = this.lastResult?.outcome === 'lose' || this.current;
+    this.onResultKey = event => {
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      const code = event.code;
+      if (code === 'Escape') {
+        event.preventDefault();
+        this.show('menu');
+        return;
+      }
+      if (!again) return;
+      if (code === 'KeyR' || code === 'Space' || code === 'Enter' || code === 'NumpadEnter') {
+        event.preventDefault();
+        this.retry();
+      }
+    };
+    addEventListener('keydown', this.onResultKey);
+  }
+
+  #unbindResultKeys() {
+    if (!this.onResultKey) return;
+    removeEventListener('keydown', this.onResultKey);
+    this.onResultKey = null;
   }
 
   // --- playing -------------------------------------------------------------
@@ -218,6 +254,11 @@ class App {
     // Optional on-screen input display.
     const inputs = p.settings.showInputs ? new InputDisplay(profile.bindings()) : null;
     this.inputs = inputs;
+
+    // Play mounts its screen directly rather than through #paint, so the
+    // result screen's shortcuts have to be dropped here too. Leaving them
+    // bound meant Space restarted the level every time you jumped.
+    this.#unbindResultKeys();
 
     this.root.replaceChildren(el('div.screen.screen--play', [
       el('div.stage', [canvas, hud.root, inputs?.root].filter(Boolean)),
@@ -404,6 +445,7 @@ class App {
       onClose: () => this.show('workshop'),
       onTest: level => this.playCustom(level),
     });
+    this.#unbindResultKeys();
     this.root.replaceChildren(this.editor.root);
   }
 

@@ -120,9 +120,9 @@ TRAINING.push(lesson('t-bounce', 'Up And Over', 'The bag bounce', {
   ],
   powerups: [pickup('magnet', 300, 840), pickup('magnet', 1060, 560)],
   hints: [
-    hint(40, 520, 'This shelf is higher than any jump. Throw the bag <b>straight up</b> while running, jump after it, and catch it in mid-air.', 560, 360),
+    hint(40, 520, 'This shelf is higher than any jump. Throw the bag <b>straight up</b>, stay under it, jump after it and catch it in mid-air.', 560, 360),
     hint(940, 300, 'That catch launches you higher than you can jump — and gives your air jump back.', 520, 300),
-    hint(1560, 300, 'Same again. The bag keeps your speed, so it travels alongside you.', 520, 300),
+    hint(1560, 300, 'Same again. The bag goes exactly where you point it, so stand where it will come down.', 520, 300),
     hint(2160, 300, 'Last one, and Bert is up on the ledge above.', 520, 300),
   ],
 }));
@@ -163,26 +163,30 @@ TRAINING.push(lesson('t-hazard', 'The Floor Is Not Your Friend', 'Hazards, shiel
 
 // --- write into levels.js --------------------------------------------------
 
-// Matches a previously generated block, header comment and all.
-const TRAINING_BLOCK = new RegExp(
-  String.raw`\n*// Training:[\s\S]*?\nexport const TRAINING = .*?;\n`, 'g');
-
 const path = join(ROOT, 'js/data/levels.js');
-let src = readFileSync(path, 'utf8');
+const src = readFileSync(path, 'utf8');
 
-// Strip any block a previous run wrote, so this script is safe to re-run.
-src = src.replace(TRAINING_BLOCK, '\n');
+// Find a previously written block by index rather than by pattern.
+//
+// This used to strip it with a regex anchored on "\n". Git rewrites this file
+// with CRLF on checkout, at which point the pattern quietly matched nothing and
+// the generator appended a *second* `export const TRAINING`, leaving a file
+// that would not parse. Indexes do not care about line endings.
+const HEADER = '// Training: short lessons';
+const MARKER = 'export const CAMPAIGN_LENGTH';
 
-const marker = '\nexport const CAMPAIGN_LENGTH';
-const head = src.slice(0, src.indexOf(marker));
+const markerAt = src.indexOf(MARKER);
+if (markerAt < 0) throw new Error('levels.js has no CAMPAIGN_LENGTH to write before');
 
-const block = `
+const existingAt = src.indexOf(HEADER);
+const head = src.slice(0, existingAt >= 0 && existingAt < markerAt ? existingAt : markerAt);
 
-// Training: short lessons, one move each, kept out of the campaign numbering so
+const block = `// Training: short lessons, one move each, kept out of the campaign numbering so
 // adding one never shifts a level index and orphans saved best times.
 export const TRAINING = ${JSON.stringify(TRAINING)};
+
 `;
 
-writeFileSync(path, head + block + src.slice(src.indexOf(marker)));
+writeFileSync(path, head + block + src.slice(markerAt));
 console.log(`wrote ${TRAINING.length} training levels`);
 for (const t of TRAINING) console.log(`  ${t.id.padEnd(10)} ${t.title.padEnd(28)} ${t.teaches}`);

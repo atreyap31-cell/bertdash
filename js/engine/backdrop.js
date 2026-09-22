@@ -60,7 +60,7 @@ function city(ctx, { cam, time, shadeColor, base, reducedFlash }) {
           const phase = rand2(k);
           const on = reducedFlash
             ? phase > 0.55
-            : ((time / 1000) * (0.12 + phase * 0.2) + phase) % 1 > 0.45;
+            : ((time / 1000) * (0.09 + phase * 0.14) + phase) % 1 > 0.45;
           if (on) ctx.fillRect(x + wx, y + wy, 6, 8);
         }
       }
@@ -91,7 +91,7 @@ function industrial(ctx, { cam, time, shadeColor, base, reducedFlash }) {
     const x = wrap(i * 260 - shift, VIEW_W + 520) - 260 + 27;
     const h = 150 + seed * 220;
     for (let p = 0; p < 4; p++) {
-      const t = wrap((time / 1000) * (0.14 + seed * 0.1) + p * 0.25, 1);
+      const t = wrap((time / 1000) * (0.07 + seed * 0.05) + p * 0.25, 1);
       const rise = t * 190;
       const alpha = (1 - t) * (reducedFlash ? 0.1 : 0.2);
       if (alpha <= 0.01) continue;
@@ -103,7 +103,7 @@ function industrial(ctx, { cam, time, shadeColor, base, reducedFlash }) {
   }
 
   // Furnace glow along the floor.
-  const pulse = reducedFlash ? 0.5 : 0.5 + Math.sin(time / 600) * 0.2;
+  const pulse = reducedFlash ? 0.5 : 0.5 + Math.sin(time / 1600) * 0.12;
   const glow = ctx.createLinearGradient(0, VIEW_H - 120, 0, VIEW_H);
   glow.addColorStop(0, 'rgba(249,115,22,0)');
   glow.addColorStop(1, `rgba(249,115,22,${(0.2 * pulse).toFixed(3)})`);
@@ -141,7 +141,7 @@ function tower(ctx, { cam, time, shadeColor, base }) {
   for (let i = 0; i < 2; i++) {
     const shaftX = i === 0 ? VIEW_W - 150 : 60;
     const dir = i === 0 ? -1 : 1;
-    const liftY = wrap(dir * time / 22 + i * 420, VIEW_H + 220) - 110;
+    const liftY = wrap(dir * time / 55 + i * 420, VIEW_H + 220) - 110;
     ctx.fillStyle = 'rgba(56,189,248,0.16)';
     ctx.fillRect(shaftX, liftY, 70, 96);
     ctx.fillStyle = 'rgba(56,189,248,0.32)';
@@ -152,7 +152,7 @@ function tower(ctx, { cam, time, shadeColor, base }) {
   // A light running down each column, so the structure itself has a pulse.
   for (let i = 0; i < 8; i++) {
     const x = wrap(i * 180 - sideShift, VIEW_W + 360) - 180;
-    const t = wrap(time / 2600 + rand(i * 7), 1);
+    const t = wrap(time / 6500 + rand(i * 7), 1);
     const y = t * (VIEW_H + 120) - 60;
     const g = ctx.createLinearGradient(0, y - 50, 0, y + 50);
     g.addColorStop(0, 'rgba(56,189,248,0)');
@@ -169,9 +169,9 @@ function tower(ctx, { cam, time, shadeColor, base }) {
 function clouds(ctx, { cam, time, shadeColor, base }) {
   sky(ctx, shadeColor(base, 30), shadeColor(base, -10));
 
-  for (const layer of [{ depth: 0.08, drift: 0.012, y: 120, scale: 1.4, alpha: 0.10 },
-                       { depth: 0.18, drift: 0.03, y: 260, scale: 1.0, alpha: 0.16 },
-                       { depth: 0.34, drift: 0.06, y: 420, scale: 0.7, alpha: 0.22 }]) {
+  for (const layer of [{ depth: 0.08, drift: 0.005, y: 120, scale: 1.4, alpha: 0.10 },
+                       { depth: 0.18, drift: 0.012, y: 260, scale: 1.0, alpha: 0.16 },
+                       { depth: 0.34, drift: 0.024, y: 420, scale: 0.7, alpha: 0.22 }]) {
     ctx.fillStyle = `rgba(255,255,255,${layer.alpha})`;
     const shift = cam.x * layer.depth + time * layer.drift;
     for (let i = 0; i < 9; i++) {
@@ -226,7 +226,7 @@ function space(ctx, { cam, time, shadeColor, base, reducedFlash }) {
       const seed = rand2(i * 17 + layer.count);
       const x = wrap(seed * VIEW_W * 3 - cam.x * layer.depth, VIEW_W + 40) - 20;
       const y = wrap(rand(i * 29 + layer.count) * VIEW_H * 3 - cam.y * layer.depth, VIEW_H + 40) - 20;
-      const twinkle = reducedFlash ? 1 : 0.65 + Math.sin(time / 420 + seed * 30) * 0.35;
+      const twinkle = reducedFlash ? 1 : 0.76 + Math.sin(time / 700 + seed * 30) * 0.24;
       ctx.fillStyle = `rgba(255,255,255,${(layer.alpha * twinkle).toFixed(3)})`;
       ctx.fillRect(x, y, layer.size, layer.size);
     }
@@ -250,7 +250,9 @@ function cyber(ctx, { cam, time, shadeColor, base, reducedFlash }) {
     ctx.lineTo(x, VIEW_H);
   }
   for (let i = 1; i < 10; i++) {
-    const t = wrap(i / 10 + (time / 4200), 1);
+    // Slow. A grid rushing at you fills the screen with motion you cannot look
+    // away from, and this sits behind the part you actually need to read.
+    const t = wrap(i / 10 + (time / 8000), 1);
     const y = horizon + (VIEW_H - horizon) * t * t;
     ctx.moveTo(0, y);
     ctx.lineTo(VIEW_W, y);
@@ -271,15 +273,16 @@ function cyber(ctx, { cam, time, shadeColor, base, reducedFlash }) {
     }
   }
 
-  // Falling code, the one bit of pure decoration.
+  // Falling code. Fewer strands, slower, and dimmer than the first cut, which
+  // had twenty-six of them racing down the screen and was tiring to look at.
   if (!reducedFlash) {
-    ctx.fillStyle = 'rgba(74,222,128,0.28)';
-    for (let i = 0; i < 26; i++) {
+    ctx.fillStyle = 'rgba(74,222,128,0.18)';
+    for (let i = 0; i < 10; i++) {
       const seed = rand2(i * 23 + 5);
       const x = wrap(seed * VIEW_W * 2 - cam.x * 0.12, VIEW_W + 20) - 10;
-      const y = wrap(time * (0.05 + seed * 0.12) + seed * VIEW_H, VIEW_H + 90) - 45;
-      for (let k = 0; k < 5; k++) {
-        ctx.globalAlpha = 0.28 * (1 - k / 5);
+      const y = wrap(time * (0.018 + seed * 0.035) + seed * VIEW_H, VIEW_H + 90) - 45;
+      for (let k = 0; k < 4; k++) {
+        ctx.globalAlpha = 0.18 * (1 - k / 4);
         ctx.fillRect(x, y - k * 14, 2, 8);
       }
     }

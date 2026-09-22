@@ -412,6 +412,12 @@ test('boost is one-shot until it recharges', () => {
 function bagBounce(game, canvas, { spendAirJump = false } = {}) {
   throwDir('up', 1);
 
+  // Stop running once it is out of your hands. A throw now leaves along the
+  // aim exactly, so a bag thrown straight up comes straight back down: sprint
+  // on and you simply leave it behind.
+  keys.up('KeyD');
+  keys.up('KeyA');
+
   for (let i = 0; i < 200; i++) {
     const f = game.food;
     const p = game.player;
@@ -1269,13 +1275,14 @@ test('the glow turns green the moment the bag is caught', () => {
   keys.down('KeyD');
   advance(30);
   throwDir('up', 30);
-  // Chase it down. The catch itself should flip the glow green and hold it.
+  // Stop under it: a throw leaves along the aim, so a bag thrown straight up
+  // comes straight back down to where it left your hand.
+  keys.up('KeyD');
   let caught = false;
   for (let i = 0; i < 180 && !caught; i++) {
     advance(1);
     if (game.player.hasFood) caught = true;
   }
-  keys.up('KeyD');
   assert.ok(caught, 'the bag should have been caught');
   const bag = game.getHudState().bag;
   assert.equal(bag.state, 'good');
@@ -1509,20 +1516,56 @@ test('a throw thrown up at the top of a jump still launches harder', () => {
     `a rising throw (${rising.toFixed(1)}) should beat a standing one (${standing.toFixed(1)})`);
 });
 
-test('the bag bounce still keeps every bit of your running speed', () => {
-  // Tossing it straight up while running must leave the bag travelling exactly
-  // alongside you — that is what makes the move reliable rather than a trick.
+test('a throw leaves along the aim whatever you are doing', () => {
+  // The contract: momentum changes how hard a throw is, never which way it
+  // goes. Adding it as a vector bent throws up to 37 degrees off the aim.
+  const angleOf = (x, y) => Math.atan2(y, x) * 180 / Math.PI;
+  const gap = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+
+  const cases = [
+    ['still', () => {}],
+    ['sprinting right', () => { keys.down('KeyD'); advance(60); }],
+    ['sprinting left', () => { keys.down('KeyA'); advance(60); }],
+    ['rising', () => { keys.down('Space'); advance(5); }],
+  ];
+  const aims = [['up', 0, -1], [['up', 'right'], 1, -1], ['right', 1, 0],
+    [['down', 'right'], 1, 1], ['down', 0, 1], ['left', -1, 0]];
+
+  for (const [label, setup] of cases) {
+    for (const [dirs, ax, ay] of aims) {
+      const { game } = boot();
+      advance(20);
+      setup();
+      // Read the launch itself. The bag's own velocity a frame later has a
+      // tick of gravity in it, which is a few degrees on a slow throw and
+      // would be measuring the arc rather than the throw.
+      const map = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+      const codes = [].concat(dirs).map(d => map[d]);
+      codes.forEach(keys.down);
+      advance(1);
+      const launch = game.launchVelocity();
+      codes.forEach(keys.up);
+      const off = gap(angleOf(launch.x, launch.y), angleOf(ax, ay));
+      ['KeyD', 'KeyA', 'Space'].forEach(keys.up);
+      game.destroy();
+      assert.ok(off <= 1,
+        `${label}, aiming ${[].concat(dirs).join('+')}: thrown ${off.toFixed(1)} degrees off aim`);
+    }
+  }
+});
+
+test('a throw into your own momentum still leaves properly', () => {
+  // Capping the opposing component matters: without it a hard enough run
+  // backwards could stall the throw on the spot.
   const { game } = boot();
   keys.down('KeyD');
   advance(60);
-  const runSpeed = game.player.vx;
-  throwDir('up', 1);
+  throwDir('left', 1);
   keys.up('KeyD');
-  const carried = game.food.vx;
+  const speed = Math.hypot(game.food.vx, game.food.vy);
   game.destroy();
-
-  assert.ok(carried >= runSpeed,
-    `the bag should keep the runner's speed: ${carried.toFixed(1)} vs ${runSpeed.toFixed(1)}`);
+  assert.ok(speed > PHYSICS.throwStrength * 0.4,
+    `a throw against a sprint should still travel, got ${speed.toFixed(1)}`);
 });
 
 

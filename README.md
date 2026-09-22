@@ -25,7 +25,7 @@ Keyboard only — there is no mouse.
 | `E` | **Dive** — a flat dash, or a chase if the bag is in the air |
 | `Shift` | **Boost** while riding a vehicle |
 | `Q` | Leave a vehicle (it stays put and can be re-boarded) |
-| `R` / `Esc` | Restart / pause |
+| `R` / `Esc` | Restart / pause. After a death `R`, `Space` or `Enter` all go straight again |
 
 **Right hand: the bag.**
 
@@ -48,8 +48,8 @@ lands decides the run:
   hangs by the wall, so a throw into a wall is something you can dive up and
   catch rather than a loss. Two glances before it gives out.
 
-- **Bag bounce.** Throw it straight up while running, jump after it, catch it in
-  mid-air. The catch launches you ~320px, nearly double a jump, and hands back
+- **Bag bounce.** Throw it straight up, stay under it, jump after it and catch
+  it in mid-air. The catch launches you ~320px, nearly double a jump, and hands back
   your air jump. Several levels have shelves out of reach any other way.
 - **Dive to recover.** With the bag loose, `E` dives straight at it — so a throw
   that went wrong is a scramble, not a loss.
@@ -57,11 +57,10 @@ lands decides the run:
   It is the fastest finish available and the hardest to pull off.
 - **The air jump flips you**, and leaves a ring where you pushed off, so the
   second jump is unmistakable in the air.
-- **Momentum carries.** The bag inherits your full speed, so a throw made at a
-  sprint or off the top of a bounce goes far further than a standing toss.
-  Momentum working against your aim is capped, though: it can take the edge off
-  a throw but never reverse it, so the bag always leaves your hand in the
-  direction you pointed.
+- **The bag goes exactly where you point it.** Momentum is projected onto the
+  aim before it is applied, so it changes how hard a throw is and never which
+  way it goes. Winding up at a sprint throws further; throwing back against
+  your own run throws shorter; both leave along the line you aimed.
 
 ### Learning it
 
