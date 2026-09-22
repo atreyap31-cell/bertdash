@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node tests/engine.test.mjs && node tests/abilities.test.mjs && node tests/replay.test.mjs && node tests/ghost.test.mjs && node tests/reachability.test.mjs && node tests/fuzz.test.mjs && node tests/profile.test.mjs",
+    "test": "node tools/run-tests.mjs",
     "start": "npx --yes http-server . -p 8080 -c-1"
   },
   "license": "MIT"

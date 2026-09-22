@@ -208,7 +208,7 @@ not work, because ES modules are blocked on `file://` URLs.
 npm test
 ```
 
-157 tests across seven suites:
+157 tests across eight suites:
 
 - `engine` — the physics loop, every platform type, win/lose latching
 - `abilities` — one test per move, checking both that it works and that it
@@ -223,10 +223,30 @@ npm test
   never re-simulates
 - `ghost` — packing a best run down to storage size, evicting under quota, and
   playing it back against the clock
+- `fuzz-geometry` — the hand-aimed invariants: spawning inside a wall, extreme
+  per-level physics, sliding into a tunnel and standing up
 - `profile` — save data, achievement rules, peer-code encoding
 
 They run in plain Node against a small DOM stub in `tests/harness.mjs` — no
-browser or test framework needed. Each file is run as its own process because
+browser or test framework needed.
+
+`npm test` goes through `tools/run-tests.mjs`, which runs each suite in its own
+process and retries one that *crashes*. On this machine (Node 24.19, Windows)
+V8 dies with a raw access violation roughly one fuzz run in five: no assertion
+runs, nothing is printed, and `--report-on-fatalerror` cannot catch it because
+the OS kills the process rather than V8 aborting. It reproduces from a plain
+script with node:test removed, dies at a different point every time, and is
+present at every commit going back months — pure JavaScript cannot segfault a
+correct engine, so it is not something the game does.
+
+What it does track is how much work one process does. Measured by building and
+running every level N times over in one process: one pass killed about 7% of
+processes, four passes 60%, twelve passes 100%. The fuzzing is therefore split
+across two files so neither process carries all of it, and the runner retries a
+crash up to four times.
+
+A suite that fails an assertion is never retried and never hidden — the run
+stops and reports it. Retries are printed, so the flake stays visible. Each file is run as its own process because
 running them together intermittently trips a V8 crash in the Node 24 test
 runner's child processes.
 

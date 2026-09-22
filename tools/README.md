@@ -99,3 +99,13 @@ writing. Levels 0-9 are left alone — they are still teaching you to run.
 node tools/bag-gate.mjs          # dry run
 node tools/bag-gate.mjs --write
 ```
+
+## `run-tests.mjs`
+
+What `npm test` runs. Each suite gets its own process; a suite that *crashes*
+is retried, a suite that fails an assertion is not.
+
+The distinction matters because of a V8 access violation on this machine — see
+the comment at the top of the file for the evidence, including how the crash
+rate scales with how much work one process does. That measurement is why the
+fuzzing is split across two files.

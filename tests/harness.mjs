@@ -98,8 +98,14 @@ export function installGlobals() {
   const windowListeners = new Map();
   const store = new Map();
 
-  globalThis.performance ??= { now: () => now };
-  globalThis.performance.now = () => now;
+  // A clock of our own. Do NOT patch the native performance object: Node's
+  // internals read performance.now(), and resetClock() winds it back to zero
+  // dozens of times a run, so a monotonic clock suddenly goes backwards.
+  Object.defineProperty(globalThis, 'performance', {
+    value: { now: () => now },
+    configurable: true,
+    writable: true,
+  });
 
   globalThis.requestAnimationFrame = fn => { pendingFrame = fn; return 1; };
   globalThis.cancelAnimationFrame = () => { pendingFrame = null; };
