@@ -75,6 +75,44 @@ export function makeCanvas({ record = true } = {}) {
   };
 }
 
+/**
+ * A minimal element: enough to hold children and report their text.
+ *
+ * Deliberately not a DOM implementation. It exists so text rendering can be
+ * tested without a browser, and it supports exactly what that needs.
+ */
+function makeElement(tag) {
+  const node = {
+    nodeType: 1,
+    tagName: String(tag ?? 'div').toUpperCase(),
+    childNodes: [],
+    get textContent() {
+      return node.childNodes.map(c => c.textContent ?? '').join('');
+    },
+    set textContent(value) {
+      node.childNodes = value === '' ? []
+        : [{ nodeType: 3, textContent: String(value), childNodes: [] }];
+    },
+    replaceChildren(...children) { node.childNodes = children; },
+    append(...children) { node.childNodes.push(...children); },
+    querySelectorAll(selector) {
+      const wanted = selector.split(',').map(s => s.trim().toUpperCase());
+      const found = [];
+      const walk = n => {
+        for (const child of n.childNodes ?? []) {
+          if (child.nodeType === 1) {
+            if (wanted.includes(child.tagName)) found.push(child);
+            walk(child);
+          }
+        }
+      };
+      walk(node);
+      return found;
+    },
+  };
+  return node;
+}
+
 /** Installs the globals the engine touches. Call once per test file. */
 function makeNullContext() {
   const ctx = {
@@ -143,7 +181,11 @@ export function installGlobals() {
 
   globalThis.document = {
     visibilityState: 'visible',
-    createElement: () => makeCanvas(),
+    // 'canvas' keeps returning the drawing stub the engine expects; anything
+    // else gets a small text node tree, which is enough to check that hint
+    // markup becomes formatting rather than literal tags.
+    createElement: tag => (tag === 'canvas' ? makeCanvas() : makeElement(tag)),
+    createTextNode: text => ({ nodeType: 3, textContent: String(text), childNodes: [] }),
     addEventListener: noop,
     activeElement: null,
     querySelector: () => null,

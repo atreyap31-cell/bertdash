@@ -90,6 +90,9 @@ export class Game {
     this.aiming = false;
     this.hint = null;
     this.nearMissCooldown = 0;
+    // Frames left on each aim direction after it is released, so a diagonal
+    // survives the keys coming up on different frames.
+    this.aimGrace = Object.fromEntries(AIM_ACTIONS.map(d => [d.id, 0]));
     // Expanding rings left behind by an air jump. They stay where the jump
     // happened while the player rises away from them.
     this.rings = [];
@@ -424,13 +427,24 @@ export class Game {
     if (p.boostCharge > 0) p.boostCharge--;
     if (p.diveTimer > 0 && --p.diveTimer === 0) p.diving = false;
     // --- aiming and throwing, on the arrow keys ---
+    //
+    // A direction keeps counting for a few frames after it is let go. Nobody
+    // releases two keys on the same frame, and without this the last one still
+    // down decided the throw: let go of Right a frame before Up and a careful
+    // diagonal went straight up instead.
     const aim = { x: 0, y: 0 };
     let aiming = false;
     for (const dir of AIM_ACTIONS) {
-      if (!this.#held(dir.id)) continue;
-      aim.x += dir.x;
-      aim.y += dir.y;
-      aiming = true;
+      if (this.#held(dir.id)) {
+        this.aimGrace[dir.id] = PHYSICS.aimGraceFrames;
+        aiming = true;
+      } else if (this.aimGrace[dir.id] > 0) {
+        this.aimGrace[dir.id]--;
+      }
+      if (this.aimGrace[dir.id] > 0) {
+        aim.x += dir.x;
+        aim.y += dir.y;
+      }
     }
     this.aiming = aiming;
     if (aiming && (aim.x || aim.y)) {
@@ -949,6 +963,8 @@ export class Game {
     this.food.vy = launch.y;
     this.food.catchCooldown = PHYSICS.catchCooldown;
     this.food.wallBouncesLeft = this.loadout.bagWallBounces;
+    // Spent: the next throw starts from whatever is held then.
+    for (const key of Object.keys(this.aimGrace)) this.aimGrace[key] = 0;
 
     // Judge the throw the instant it leaves your hands: a bad one should be
     // red before the bag has travelled, not four frames later.

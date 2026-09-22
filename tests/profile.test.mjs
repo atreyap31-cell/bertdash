@@ -150,3 +150,50 @@ test('gzipped codes are meaningfully smaller than the raw JSON', async () => {
 test('a malformed peer code is rejected rather than silently accepted', async () => {
   await assert.rejects(() => decodeCode('xnot-a-real-code'), /Unrecognised code format/);
 });
+
+// --- text rendering --------------------------------------------------------
+
+test('hint markup renders as formatting, not as literal tags', async () => {
+  const { richText } = await import('../js/ui/dom.js');
+  const render = text => {
+    const box = globalThis.document.createElement('div');
+    box.replaceChildren(...richText(text));
+    return box;
+  };
+
+  const bold = render('Press <b>S</b> to slide.');
+  assert.equal(bold.textContent, 'Press S to slide.', 'the tags must not show');
+  assert.equal(bold.querySelectorAll('strong').length, 1, 'and must become real emphasis');
+
+  const em = render('Bert<em>Net</em>');
+  assert.equal(em.textContent, 'BertNet');
+  assert.equal(em.querySelectorAll('em').length, 1);
+});
+
+test('anything other than b and em stays literal text', async () => {
+  const { richText } = await import('../js/ui/dom.js');
+  // Hints travel with custom levels, and a custom level can arrive from
+  // another player over BertNet, so this must never parse arbitrary markup.
+  const box = globalThis.document.createElement('div');
+  const hostile = '<script>alert(1)</script><img src=x onerror=alert(1)>';
+  box.replaceChildren(...richText(hostile));
+  assert.equal(box.textContent, hostile, 'it should be shown, not interpreted');
+  assert.equal(box.querySelectorAll('script, img').length, 0, 'and nothing should be created');
+});
+
+test('every hint in the game renders without leaving tags behind', async () => {
+  const { richText } = await import('../js/ui/dom.js');
+  const { LEVELS, TRAINING } = await import('../js/data/levels.js');
+
+  const leftover = [];
+  for (const level of [...LEVELS, ...TRAINING]) {
+    for (const hint of level.hints ?? []) {
+      const box = globalThis.document.createElement('div');
+      box.replaceChildren(...richText(hint.text));
+      if (/<\/?(b|em)>/i.test(box.textContent)) {
+        leftover.push(`level ${level.id}: ${box.textContent.slice(0, 60)}`);
+      }
+    }
+  }
+  assert.deepEqual(leftover, [], `\n${leftover.join('\n')}`);
+});

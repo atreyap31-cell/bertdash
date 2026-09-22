@@ -1,7 +1,7 @@
 // In-game HUD. Reads live values from the engine each animation frame and
 // writes them straight into existing nodes — no re-render, no diffing.
 
-import { el, formatTime } from './dom.js';
+import { el, formatTime, richText } from './dom.js';
 
 export class Hud {
   /**
@@ -183,7 +183,8 @@ export class Hud {
     if (state.hint !== this._hint) {
       this._hint = state.hint;
       this.hintEl.hidden = !state.hint;
-      if (state.hint) this.hintEl.textContent = state.hint;
+      // Hints mark the key to press with <b>; textContent printed the tags.
+      if (state.hint) this.hintEl.replaceChildren(...richText(state.hint));
     }
 
     // Flow chain.

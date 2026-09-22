@@ -14,13 +14,13 @@ import { prepareLevel, isSolidType } from '../js/engine/level.js';
 
 /** rise / gap each move can manage, with a safety margin already applied. */
 export const MOVES = [
-  { name: 'run jump',        rise: 179, gap: 329, bag: false },
-  { name: 'air jump',        rise: 223, gap: 531, bag: false },
-  { name: 'long jump',       rise: 112, gap: 712, bag: false },
-  { name: 'long jump + air', rise: 135, gap: 1139, bag: false },
-  { name: 'dive',            rise: 148, gap: 816, bag: false },
-  { name: 'bag bounce',      rise: 320, gap: 416, bag: true },
-  { name: 'bag bounce + air',rise: 320, gap: 695, bag: true },
+  { name: 'run jump',        rise: 179, gap: 329, bag: false, key: 'runJump' },
+  { name: 'air jump',        rise: 223, gap: 531, bag: false, key: 'airJump' },
+  { name: 'long jump',       rise: 112, gap: 712, bag: false, key: 'longJump' },
+  { name: 'long jump + air', rise: 135, gap: 1139, bag: false, key: 'longJump' },
+  { name: 'dive',            rise: 148, gap: 816, bag: false, key: 'dive' },
+  { name: 'bag bounce',      rise: 320, gap: 416, bag: true, key: 'bag' },
+  { name: 'bag bounce + air',rise: 320, gap: 695, bag: true, key: 'bag' },
 ];
 
 export const FALL_GAP = 760;     // how far you can drift sideways on the way down
@@ -181,13 +181,15 @@ export function canReach(level, from, to, opts = {}) {
   const riseScale = 1 / gravity;
 
   if (rise <= 0) return gap <= Math.max(FALL_GAP, Math.max(...MOVES.map(m => m.gap)));
-  if (rise <= WALL_CLIMB * riseScale && wallBetween(level, from, to) && gap <= 420) {
+  if (opts.wallClimb !== false
+      && rise <= WALL_CLIMB * riseScale && wallBetween(level, from, to) && gap <= 420) {
     // A shaft you cannot fit up is not a route.
     return narrowestGap(level, from, to) >= SQUEEZE;
   }
 
   return MOVES.some(m =>
     (useBag || !m.bag)
+    && opts[m.key] !== false
     && rise + MARGIN <= m.rise * riseScale
     && gap + MARGIN <= m.gap);
 }

@@ -1695,3 +1695,44 @@ test('the flip is animation only and never moves the player', () => {
   assert.deepEqual(run(true), run(false),
     'the flip must not change where the air jump takes you');
 });
+
+test('a diagonal survives the two keys coming up a few frames apart', () => {
+  // Nobody releases two keys on the same frame. Without a grace period the
+  // key still down decided the throw, so letting go of Right just before Up
+  // turned a careful diagonal into a throw straight up.
+  const angleOf = (x, y) => Math.atan2(y, x) * 180 / Math.PI;
+
+  const release = (apart) => {
+    const { game } = boot();
+    advance(20);
+    keys.down('ArrowUp');
+    keys.down('ArrowRight');
+    advance(10);
+    keys.up('ArrowRight');
+    advance(apart);
+    keys.up('ArrowUp');
+    advance(1);
+    const angle = angleOf(game.food.vx, game.food.vy);
+    game.destroy();
+    return angle;
+  };
+
+  for (const apart of [0, 1, 3, 5]) {
+    const angle = release(apart);
+    assert.ok(Math.abs(angle + 45) < 12,
+      `released ${apart} frame(s) apart: threw ${angle.toFixed(0)}deg, wanted the -45deg diagonal`);
+  }
+});
+
+test('the aim grace does not bend a deliberate straight throw', () => {
+  const angleOf = (x, y) => Math.atan2(y, x) * 180 / Math.PI;
+  for (const [dir, want] of [['up', -90], ['right', 0], ['down', 90], ['left', 180]]) {
+    const { game } = boot();
+    advance(20);
+    throwDir(dir, 10);
+    const angle = angleOf(game.food.vx, game.food.vy);
+    game.destroy();
+    const off = Math.abs(Math.abs(angle) - Math.abs(want));
+    assert.ok(off < 3, `${dir} threw ${angle.toFixed(0)}deg, wanted ${want}`);
+  }
+});

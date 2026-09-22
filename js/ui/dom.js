@@ -36,6 +36,35 @@ export function el(tag, props, children) {
   return node;
 }
 
+/**
+ * Renders the small amount of markup level text is allowed to carry.
+ *
+ * Hints are written with <b> around the key you are meant to press, and the
+ * HUD was printing them through textContent, so ten of the twenty-nine hints
+ * in the game read "Press <b>S</b> to slide" with the tags showing.
+ *
+ * innerHTML is not an option here: hints travel with custom levels, and a
+ * custom level can arrive from another player over BertNet. This builds real
+ * nodes for <b> and <em> and leaves everything else as text, so anything that
+ * is not one of those two tags shows up literally rather than being parsed.
+ *
+ * @returns {Node[]}
+ */
+export function richText(text) {
+  const out = [];
+  const pattern = /<(b|em)>([\s\S]*?)<\/\1>/gi;
+  let at = 0;
+  for (const match of String(text ?? '').matchAll(pattern)) {
+    if (match.index > at) out.push(document.createTextNode(text.slice(at, match.index)));
+    const strong = document.createElement(match[1].toLowerCase() === 'b' ? 'strong' : 'em');
+    strong.textContent = match[2];
+    out.push(strong);
+    at = match.index + match[0].length;
+  }
+  if (at < String(text ?? '').length) out.push(document.createTextNode(text.slice(at)));
+  return out;
+}
+
 export function append(parent, children) {
   if (children == null || children === false) return parent;
   if (Array.isArray(children)) {

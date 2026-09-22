@@ -150,6 +150,11 @@ export const PHYSICS = {
   // Throwing. Hold to charge for a longer throw.
   throwStrength: 9,
   throwChargeFrames: 40,
+  // How long a released aim direction keeps counting, so letting go of two
+  // keys a frame or two apart still throws the diagonal you were aiming.
+  // A tenth of a second: long enough to cover human release, short enough
+  // that it cannot turn a deliberate straight throw into a diagonal.
+  aimGraceFrames: 6,
   throwChargeBonus: 0.9,  // +90% strength at full charge
   foodGravity: 0.28,
   // Catching the bag out of the air launches you: throw it up and ahead, jump

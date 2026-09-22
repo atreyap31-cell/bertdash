@@ -43,16 +43,18 @@ TRAINING.push(lesson('t-air', 'Second Wind', 'The air jump', {
   startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 }, goalPos: { x: 2840, y: 450 },
   platforms: [
     solid(0, 500, 560),
-    ledge(1000, 470, 200),      // 440 gap: one jump will not clear it
-    ledge(1640, 470, 200),
-    solid(2260, 500, 740),
-    spikes(580, 680, 400),
-    spikes(1220, 680, 400),
-    spikes(1860, 680, 380),
+    // 200px up each time. A run jump manages 179 and a long jump only 135, so
+    // height is what forces the second jump — a wide gap never did, because a
+    // long jump clears 712px of it and a dive clears 816.
+    ledge(760, 300, 220),
+    ledge(1180, 300, 220),
+    ledge(1600, 300, 220),
+    solid(2020, 500, 980),
+    spikes(580, 680, 1420),
   ],
   hints: [
-    hint(40, 240, 'These gaps are too wide for one jump. Press Space <b>again in mid-air</b> for a second one.'),
-    hint(940, 220, 'Steer while you air-jump and it sends you that way too.'),
+    hint(40, 240, 'These shelves are too high for one jump. Press Space <b>again in mid-air</b> for a second one.'),
+    hint(700, 60, 'Steer while you air-jump and it sends you that way too.'),
   ],
 }));
 
@@ -61,7 +63,10 @@ TRAINING.push(lesson('t-slide', 'Low Bridge', 'Sliding and the long jump', {
   startPos: { x: 90, y: 452 }, foodPos: { x: 130, y: 452 }, goalPos: { x: 3240, y: 450 },
   platforms: [
     solid(0, 500, 1500),
-    solid(700, 380, 500, 90),   // a 30px crawl space
+    // Tall, not a lintel. At 90px high you could simply jump onto the top of
+    // it and walk over, which is what made the lesson optional; from the floor
+    // a jump reaches 179px, so a block rising 260px cannot be climbed.
+    solid(700, 240, 500, 230),
     solid(2100, 500, 1300),
     spikes(1520, 680, 560),
   ],
@@ -91,11 +96,15 @@ TRAINING.push(lesson('t-wall', 'Up The Shaft', 'Wall kicks', {
 
 TRAINING.push(lesson('t-throw', 'The Bag', 'Aiming and throwing', {
   width: 3200, height: 800, theme: 'horizontal', background: '#0c4a6e',
-  startPos: { x: 90, y: 552 }, foodPos: { x: 130, y: 552 }, goalPos: { x: 2900, y: 420 },
+  startPos: { x: 90, y: 552 }, foodPos: { x: 130, y: 552 }, goalPos: { x: 2900, y: 300 },
   platforms: [
     solid(0, 600, 900),
     solid(1500, 600, 700),
-    solid(2700, 460, 500, 340),
+    // Bert sits 260px up. Every move on foot tops out at 223 (the air jump),
+    // so the only ways onto that ledge are a bag bounce or landing the throw
+    // on him — both of which are the bag. He used to be 140px up, which any
+    // jump cleared, so the lesson could be walked past.
+    solid(2700, 340, 500, 460),
     spikes(920, 780, 560),
   ],
   powerups: [pickup('magnet', 400, 540), pickup('magnet', 1700, 540)],
@@ -103,7 +112,7 @@ TRAINING.push(lesson('t-throw', 'The Bag', 'Aiming and throwing', {
     hint(40, 320, 'The <b>arrow keys</b> throw the bag. Hold one to aim and charge, let go to throw. Two together throws diagonally.'),
     hint(560, 320, 'Watch the dotted arc — that is exactly where it will land. If the bag hits a floor, the delivery is over.'),
     hint(1480, 300, 'Those orange pickups are magnets: they pull a loose bag back to you.'),
-    hint(2400, 260, 'Bert is up on that ledge. You can walk it up — or throw the bag straight at him and be done.', 520, 400),
+    hint(2400, 200, 'Bert is too high to climb to. Throw the bag straight at him.', 520, 420),
   ],
 }));
 
