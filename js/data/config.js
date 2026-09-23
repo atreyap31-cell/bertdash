@@ -388,8 +388,23 @@ export const GEAR = [
   { id: 'coyote_kit',   name: 'Coyote Kit',     cost: 3000,  icon: '\u23F1', tier: 'Movement',
     description: 'More grace after leaving a ledge, and a longer jump buffer.',
     effect: { graceFrames: 4 } },
-  { id: 'second_wind',  name: 'Second Wind',    cost: 5200,  icon: '\u2191', tier: 'Movement',
-    description: 'A second air jump.',
+  // The most powerful thing in the shop, and priced accordingly.
+  //
+  // Measured in the engine (a run-up into a full-height multi-jump), an extra
+  // air jump takes the reachable envelope from 282px of rise and 595px of gap
+  // to 401 and 822 -- it very nearly doubles the area of a level you can get
+  // to. Spring Heels, the next best movement upgrade, buys 20%. At the old
+  // $5,200 that was about $50 for each 1% of envelope against Spring Heels'
+  // $450: eight times the value of anything else in the tier, so there was no
+  // reason not to buy it first and little reason to buy much else after.
+  //
+  // At $28,000 it is the most expensive piece of gear in the game, about two
+  // clean campaign runs' worth of tips, and works out near $290 per 1% -- still
+  // the best value in the tier, so it stays worth saving for, but it is now
+  // what you buy last rather than what you buy on level 30. No level is
+  // designed around it: the route analysis assumes the one free air jump.
+  { id: 'second_wind',  name: 'Second Wind',    cost: 28000,  icon: '\u2191', tier: 'Movement',
+    description: 'A second air jump. Nearly doubles how much of a level you can reach.',
     effect: { airJumps: 1 } },
   { id: 'dust_brakes',  name: 'Dust Brakes',    cost: 5800,  icon: '\u21E5', tier: 'Movement',
     description: 'Slides run 40% longer, so long jumps carry further.',

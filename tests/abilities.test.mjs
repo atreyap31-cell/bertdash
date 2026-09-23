@@ -1774,3 +1774,71 @@ test('a car you step out of in mid-air falls instead of hanging there', () => {
     `the car should have fallen, went from ${leftAt.toFixed(0)} to ${car.y.toFixed(0)}`);
   assert.ok(restingOn, 'and come to rest on something');
 });
+
+test('Second Wind is priced against how much of a level it opens up', async () => {
+  const { GEAR_BY_ID, resolveLoadout } = await import('../js/data/config.js');
+
+  // Flies a run-up into a full-height multi-jump and reports the envelope:
+  // how high and how far that jump gets you. This is the thing gear competes
+  // over, so it is what the prices should be in proportion to.
+  function envelope(owned) {
+    resetClock();
+    const level = fixture({ width: 6000, platforms: [
+      { x: 0, y: FLOOR_Y, width: 6000, height: 200, type: 'static' }] });
+    const game = new Game(makeCanvas(), level, {
+      skin: { color: '#06c167', textColor: '#fff' },
+      loadout: resolveLoadout(owned),
+      onWin() {}, onLose() {}, onStats() {},
+    });
+    game.start();
+    advance(40);
+
+    const ground = game.player.y;
+    let launch = game.player.x, airborne = false, rise = 0, gap = 0;
+    const watch = n => {
+      for (let i = 0; i < n; i++) {
+        advance(1);
+        const p = game.player;
+        if (!p.grounded && !airborne) { airborne = true; launch = p.x; }
+        if (airborne) {
+          rise = Math.max(rise, ground - p.y);
+          gap = Math.max(gap, p.x - launch);
+        }
+      }
+    };
+
+    keys.down('KeyD'); watch(45);
+    for (let i = 0; i < 3; i++) {       // three presses; only Second Wind uses the third
+      keys.down('Space'); watch(12); keys.up('Space'); watch(i < 2 ? 14 : 2);
+    }
+    for (let i = 0; i < 240 && !(airborne && game.player.grounded); i++) watch(1);
+    keys.up('KeyD');
+    game.destroy();
+    return rise * gap;
+  }
+
+  const base = envelope([]);
+  const wind = envelope(['second_wind']);
+  const heels = envelope(['spring_heels']);
+
+  const growth = (area, id) => ({
+    percent: (area / base - 1) * 100,
+    perPercent: GEAR_BY_ID[id].cost / ((area / base - 1) * 100),
+  });
+  const w = growth(wind, 'second_wind');
+  const h = growth(heels, 'spring_heels');
+
+  assert.ok(w.percent > 60,
+    `an extra air jump should be transformative, measured ${w.percent.toFixed(0)}%`);
+
+  // The bug this pins: at $5,200 Second Wind was $54 per 1% of envelope while
+  // Spring Heels was $424 — eight times the value of anything else, so it was
+  // always the correct first purchase and nothing else in the tier mattered.
+  assert.ok(w.perPercent > h.perPercent * 0.5,
+    `Second Wind costs $${w.perPercent.toFixed(0)} per 1% of envelope against `
+    + `Spring Heels' $${h.perPercent.toFixed(0)} — far too cheap for what it does`);
+
+  // It should still be worth saving for, or nobody ever buys it.
+  assert.ok(w.perPercent < h.perPercent,
+    'but it should stay the best value in the tier');
+});
