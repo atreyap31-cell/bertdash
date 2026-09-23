@@ -394,6 +394,43 @@ export class Game {
     }
   }
 
+  /**
+   * Lifts the player clear of anything they are inside.
+   *
+   * Only vertical: sideways is handled by the X pass, and shoving someone
+   * sideways out of a lift would be worse than the overlap. The shorter way
+   * out wins, and if that is blocked the other way is taken, so a player
+   * caught between a descending platform and the floor is set on the floor
+   * rather than pressed through it.
+   */
+  #pushOutOfSolids(p, solids) {
+    for (const plat of solids) {
+      if (plat.oneWay) continue;
+      if (!overlaps(p, plat)) continue;
+
+      const up = (p.y + p.height) - plat.y;      // move up to sit on top
+      const down = (plat.y + plat.height) - p.y; // move down to drop clear
+      const tryFirst = up <= down
+        ? [plat.y - p.height, plat.y + plat.height]
+        : [plat.y + plat.height, plat.y - p.height];
+
+      for (const y of tryFirst) {
+        const moved = { x: p.x, y, width: p.width, height: p.height };
+        if (solids.some(other => !other.oneWay && other !== plat && overlaps(moved, other))) continue;
+        const landed = y < p.y;            // pushed up: we are now on top of it
+        p.y = y;
+        if (landed) {
+          p.vy = Math.min(p.vy, 0);
+          p.grounded = true;
+          p.groundPlatform = plat;
+        } else if (p.vy < 0) {
+          p.vy = 0;                        // shoved down out of a ceiling
+        }
+        break;
+      }
+    }
+  }
+
   /** Is this platform currently something you can stand on / bump into? */
   #isSolidNow(p) {
     if (!isSolidType(p.type)) return false;
@@ -720,6 +757,11 @@ export class Game {
           && p.groundPlatform.respawnAt <= 0) {
         p.groundPlatform.touchedAt = 550;
       }
+
+      // Being carried happens after the collision pass, so nothing has checked
+      // where it put you. A lift rising into a ceiling, or descending into the
+      // floor, pushed the rider straight into it and left them there.
+      this.#pushOutOfSolids(p, this.#solidPlatforms());
     }
 
     p.x = clamp(p.x, 0, this.level.width - p.width);

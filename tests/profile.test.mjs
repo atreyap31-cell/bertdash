@@ -147,8 +147,20 @@ test('gzipped codes are meaningfully smaller than the raw JSON', async () => {
   assert.ok(code.length < raw / 2, `expected compression, got ${code.length} vs ${raw}`);
 });
 
-test('a malformed peer code is rejected rather than silently accepted', async () => {
-  await assert.rejects(() => decodeCode('xnot-a-real-code'), /Unrecognised code format/);
+test('a malformed peer code is rejected, and says why in plain words', async () => {
+  // These messages go straight into a toast the player reads. The browser's own
+  // failures here say things like "Failed to execute 'atob' on 'Window'".
+  await assert.rejects(() => decodeCode('xnot-a-real-code'), /does not look like a BertDash code/);
+  await assert.rejects(() => decodeCode('   '), /empty/);
+  await assert.rejects(() => decodeCode('zH4sIAAAAAAAA'), /damaged/);
+});
+
+test('a code that decodes but is not a handshake is still refused', async () => {
+  // Valid base64 of valid JSON that has nothing to do with WebRTC.
+  const bytes = new TextEncoder().encode(JSON.stringify({ hello: 'world' }));
+  const b64 = Buffer.from(bytes).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  await assert.rejects(() => decodeCode('r' + b64), /not an invite or a reply/);
 });
 
 // --- text rendering --------------------------------------------------------

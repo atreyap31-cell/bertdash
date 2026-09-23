@@ -426,9 +426,13 @@ NEW.push(level(51, 'FREE FALL', 'Down is the easy direction. Mind the edges.', {
     // The clear strip sits under the lip you step off above it.
     ...Array.from({ length: 11 }, (_, i) => {
       const y = 600 + i * 260;
+      // A 200px landing at the far end of each shelf, right under the lip you
+      // step off above it. Falling the 260px between rows buys about 430px of
+      // sideways reach, so this is comfortably possible — but only if you hold
+      // your line. Drift and the spikes have the rest of the shelf.
       return i % 2 === 0
-        ? [ledge(0, y, 520), spikes(420, y - 20, 100)]     // land 0-420
-        : [ledge(380, y, 520), spikes(380, y - 20, 100)];  // land 480-900
+        ? [ledge(0, y, 520), spikes(0, y - 20, 320)]       // land 320-520
+        : [ledge(380, y, 520), spikes(580, y - 20, 320)];  // land 380-580
     }).flat(),
     solid(0, 3470, 900, 130),
   ],

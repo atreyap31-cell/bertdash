@@ -45,14 +45,40 @@ export async function encodeCode(value) {
   return 'z' + bytesToBase64Url(await collapse(stream));
 }
 
+/**
+ * @throws {Error} with something a player can act on. The browser's own
+ *   failures here read like "Failed to execute 'atob' on 'Window'", which was
+ *   going straight into a toast.
+ */
 export async function decodeCode(code) {
-  const trimmed = code.trim();
+  const trimmed = String(code ?? '').trim();
+  if (!trimmed) throw new Error('That box is empty — paste the code your friend sent you');
+
   const marker = trimmed[0];
-  const bytes = base64UrlToBytes(trimmed.slice(1));
-  if (marker === 'r') return JSON.parse(new TextDecoder().decode(bytes));
-  if (marker !== 'z') throw new Error('Unrecognised code format');
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return JSON.parse(new TextDecoder().decode(await collapse(stream)));
+  if (marker !== 'r' && marker !== 'z') {
+    throw new Error('That does not look like a BertDash code');
+  }
+
+  let description;
+  try {
+    const bytes = base64UrlToBytes(trimmed.slice(1));
+    description = marker === 'r'
+      ? JSON.parse(new TextDecoder().decode(bytes))
+      : JSON.parse(new TextDecoder().decode(await collapse(
+          new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')))));
+  } catch {
+    throw new Error('That code is damaged — it may have been cut short in the paste');
+  }
+
+  if (description?.type !== 'offer' && description?.type !== 'answer') {
+    throw new Error('That code is not an invite or a reply');
+  }
+  return description;
+}
+
+/** Whether a code is an invite or the reply to one, without connecting. */
+export async function readCodeKind(code) {
+  return (await decodeCode(code)).type;
 }
 
 // --- peer ------------------------------------------------------------------
@@ -147,6 +173,9 @@ export class PeerService {
   /** Guest: consume an offer code and produce an answer code. */
   async acceptOffer(code) {
     const description = await decodeCode(code);
+    if (description.type !== 'offer') {
+      throw new Error('That is a reply, not an invite — the person who hosted pastes it');
+    }
     const pc = this.#createConnection();
     await pc.setRemoteDescription(description);
     await pc.setLocalDescription(await pc.createAnswer());
@@ -158,7 +187,11 @@ export class PeerService {
   /** Host: finish the handshake with the friend's answer code. */
   async acceptAnswer(code) {
     if (!this.#pc) throw new Error('Generate an invite code first');
-    await this.#pc.setRemoteDescription(await decodeCode(code));
+    const description = await decodeCode(code);
+    if (description.type !== 'answer') {
+      throw new Error('That is an invite, not a reply — only one of you hosts');
+    }
+    await this.#pc.setRemoteDescription(description);
     this.#setStatus('connecting');
   }
 

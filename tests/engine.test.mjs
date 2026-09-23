@@ -509,3 +509,34 @@ test('a bar hanging in space is marked as floating, ground is not', () => {
   assert.equal(at(600).floating, undefined, 'a tall block is not a bar');
   game.destroy();
 });
+
+test('a lift cannot carry you into a ceiling', () => {
+  // Being carried by a moving platform happens after the collision pass, so
+  // nothing had checked where it put you. A lift rising into a ceiling pushed
+  // its rider into it and left them there.
+  const { game } = boot(fixture({
+    width: 1600, height: 1400,
+    startPos: { x: 500, y: 1052 }, foodPos: { x: 540, y: 1052 },
+    goalPos: { x: 1500, y: 1070 },
+    platforms: [
+      { x: 0, y: 1100, width: 1600, height: 200, type: 'static' },
+      { x: 400, y: 400, width: 700, height: 120, type: 'static' },
+      { x: 440, y: 1060, width: 300, height: 30, type: 'moving', velY: -6, range: 600 },
+    ],
+  }));
+
+  const ceiling = game.level.platforms[1];
+  let worst = 0;
+  for (let i = 0; i < 200; i++) {
+    advance(1);
+    const p = game.player;
+    const apart = p.x >= ceiling.x + ceiling.width || p.x + p.width <= ceiling.x
+      || p.y >= ceiling.y + ceiling.height || p.y + p.height <= ceiling.y;
+    if (!apart) {
+      worst = Math.max(worst,
+        Math.min((p.y + p.height) - ceiling.y, (ceiling.y + ceiling.height) - p.y));
+    }
+  }
+  game.destroy();
+  assert.equal(worst, 0, `the lift pushed its rider ${worst.toFixed(0)}px into the ceiling`);
+});

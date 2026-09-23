@@ -6,7 +6,7 @@ import { LEVELS, TRAINING, CAMPAIGN_LENGTH } from '../data/levels.js';
 import { profile } from '../services/profile.js';
 import { listGhosts } from '../services/ghost.js';
 import { audio } from '../services/audio.js';
-import { peer } from '../services/net.js';
+import { peer, readCodeKind } from '../services/net.js';
 
 const pick = list => list[Math.floor(Math.random() * list.length)];
 
@@ -745,12 +745,15 @@ export function openHub() {
             onclick: async () => {
               if (!theirCode.value.trim()) return;
               try {
-                // An invite you were sent produces an answer; an answer you
-                // were sent completes a session you already hosted.
-                if (myCode.value) await peer.acceptAnswer(theirCode.value);
+                // Decide from the code itself, not from whether this player
+                // happened to press Generate. Someone who pressed it and then
+                // pasted their friend's invite used to get told their friend's
+                // code was broken.
+                const kind = await readCodeKind(theirCode.value);
+                if (kind === 'answer') await peer.acceptAnswer(theirCode.value);
                 else myCode.value = await peer.acceptOffer(theirCode.value);
               } catch (error) {
-                toast('That code did not work: ' + error.message, { tone: 'bad' });
+                toast(error.message, { tone: 'bad' });
               }
             },
           }, 'Connect'),
