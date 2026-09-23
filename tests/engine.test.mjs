@@ -487,3 +487,25 @@ test('an unknown backdrop name falls back rather than throwing', async () => {
   // Custom levels have string ids and no campaign position at all.
   assert.equal(typeof backdropFor({ id: 'custom-123', theme: 'vertical' }), 'function');
 });
+
+test('a bar hanging in space is marked as floating, ground is not', () => {
+  // Purely cosmetic: floating bars get struts and a shadow so they read as
+  // something bolted there rather than a rectangle left behind. PENTHOUSE is
+  // seventeen 100x20 stubs in a tall shaft and looked like debris.
+  const { game } = boot(fixture({
+    height: 1400,
+    platforms: [
+      { x: 0, y: 1300, width: 3000, height: 100, type: 'static' },   // ground
+      { x: 400, y: 500, width: 120, height: 20, type: 'static' },    // in space
+      { x: 900, y: 1200, width: 120, height: 20, type: 'static' },   // just above ground
+      { x: 1400, y: 600, width: 200, height: 300, type: 'static' },  // a block, not a bar
+    ],
+  }));
+
+  const at = y => game.level.platforms.find(p => p.y === y);
+  assert.equal(at(500).floating, true, 'a bar with nothing under it is floating');
+  assert.equal(at(1200).floating, false, 'a bar just above the ground is not');
+  assert.equal(at(1300).floating, undefined, 'thick ground is never considered');
+  assert.equal(at(600).floating, undefined, 'a tall block is not a bar');
+  game.destroy();
+});

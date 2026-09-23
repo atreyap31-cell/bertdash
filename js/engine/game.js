@@ -36,6 +36,7 @@ export class Game {
     this.ctx = canvas.getContext('2d');
     this.level = prepareLevel(levelSource);
     this.backdrop = backdropFor(this.level);
+    this.#markFloating();
     this.skin = options.skin ?? { color: COLORS.player, textColor: '#fff' };
     this.onWin = options.onWin ?? (() => {});
     this.onLose = options.onLose ?? (() => {});
@@ -1856,6 +1857,27 @@ export class Game {
     };
   }
 
+  /**
+   * Flags the thin platforms with nothing under them.
+   *
+   * A 100x20 bar alone in a tall shaft is drawn exactly like a slab of ground,
+   * so it reads as a stray rectangle rather than as somewhere to stand. These
+   * get struts and a shadow instead, which is the difference between debris and
+   * a catwalk someone bolted there.
+   *
+   * Done once, not per frame: it only depends on the level's fixed geometry.
+   */
+  #markFloating() {
+    const solid = this.level.platforms.filter(p => isSolidType(p.type));
+    for (const plat of solid) {
+      if (plat.height > 34) continue;
+      const under = solid.some(q => q !== plat
+        && q.x < plat.x + plat.width && q.x + q.width > plat.x
+        && q.y >= plat.y + plat.height && q.y < plat.y + plat.height + 130);
+      plat.floating = !under;
+    }
+  }
+
   // --- rendering -----------------------------------------------------------
 
   /**
@@ -1951,6 +1973,26 @@ export class Game {
 
   #drawBlock(ctx, plat, color) {
     const { x, y, width: w, height: h } = plat;
+
+    // A bar hanging in space gets struts and a shadow so it reads as installed
+    // rather than as a rectangle someone forgot to finish.
+    if (plat.floating) {
+      const inset = Math.min(14, w * 0.18);
+      const drop = 16;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.20)';
+      ctx.fillRect(x + inset, y + h, 6, drop);
+      ctx.fillRect(x + w - inset - 6, y + h, 6, drop);
+      // A soft shadow under the whole span, so it sits in the space rather
+      // than floating on top of it.
+      const shadow = ctx.createLinearGradient(0, y + h, 0, y + h + drop + 10);
+      shadow.addColorStop(0, 'rgba(0,0,0,0.22)');
+      shadow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shadow;
+      ctx.fillRect(x, y + h, w, drop + 10);
+      ctx.restore();
+    }
+
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w, h);
     // Lit top edge reads as a surface you can land on.

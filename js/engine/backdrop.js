@@ -34,7 +34,10 @@ function overlayScale(hex) {
   const n = parseInt(String(hex).slice(1), 16);
   if (!Number.isFinite(n)) return 1;
   const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
-  return 1 - Math.min(0.8, lum * 2.2);
+  // Eased back: the first cut damped so hard that a mid-toned level lost its
+  // backdrop entirely and read as a flat void. The bright levels that caused
+  // the original grid are on clouds now anyway.
+  return 1 - Math.min(0.7, lum * 1.4);
 }
 
 function sky(ctx, top, bottom) {
@@ -140,15 +143,15 @@ function tower(ctx, { cam, time, shadeColor, base }) {
   const step = 160;
   for (let i = 0; i < 6; i++) {
     const y = wrap(i * step - shift, VIEW_H + step) - step;
-    ctx.fillStyle = `rgba(0,0,0,${(0.11 * dim).toFixed(3)})`;
+    ctx.fillStyle = `rgba(0,0,0,${(0.16 * dim).toFixed(3)})`;
     ctx.fillRect(0, y, VIEW_W, 46);
-    ctx.fillStyle = `rgba(148,163,184,${(0.08 * dim).toFixed(3)})`;
+    ctx.fillStyle = `rgba(148,163,184,${(0.11 * dim).toFixed(3)})`;
     ctx.fillRect(0, y + 46, VIEW_W, 2);
   }
 
   // Structural columns, moving with horizontal parallax.
   const sideShift = cam.x * 0.3;
-  ctx.fillStyle = `rgba(0,0,0,${(0.12 * dim).toFixed(3)})`;
+  ctx.fillStyle = `rgba(0,0,0,${(0.17 * dim).toFixed(3)})`;
   for (let i = 0; i < 6; i++) {
     const x = wrap(i * 260 - sideShift, VIEW_W + 520) - 260;
     ctx.fillRect(x, 0, 26, VIEW_H);
