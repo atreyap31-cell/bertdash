@@ -162,11 +162,28 @@ function preparePowerup(source) {
  * target and the star thresholds agree with each other and hold up for
  * custom levels too (the old build hardcoded par 999 for those).
  */
+/**
+ * Pace a par time is set at, in pixels per second.
+ *
+ * On foot the courier covers 420px a second, and a good deal more with empty
+ * hands, so 170 is a little over a third of walking pace — deliberately slack,
+ * because par is a target rather than a record.
+ *
+ * A level that hands you a car is a different problem. A car does 1,080px a
+ * second and 1,680 boosting, so the same figure gave RING ROAD a par of 52.9s
+ * for a level you can drive in twenty. Those levels are paced against what
+ * they actually lend you.
+ */
+const PAR_PACE = 170;
+const PAR_PACE_DRIVING = 380;
+
 export function computeParTime(level) {
   const travel = level.theme === 'vertical'
     ? Math.abs(level.startPos.y - level.goalPos.y) + level.width * 0.3
     : Math.abs(level.startPos.x - level.goalPos.x) + level.height * 0.3;
-  const seconds = travel / 170;
+
+  const driving = (level.vehicles?.length ?? 0) > 0;
+  const seconds = travel / (driving ? PAR_PACE_DRIVING : PAR_PACE);
   return Math.max(6, Math.round(seconds * 10) / 10);
 }
 

@@ -792,17 +792,19 @@ NEW.push(level(63, 'THE CHIMNEY', 'Kick up. Do not stand still.', {
 
 // 64 — long jumps into a crosswind, which is the only level that makes you
 //      account for being pushed mid-flight.
-NEW.push(level(64, 'CROSSWIND', 'The wind takes a third of every jump.', {
+NEW.push(level(64, 'THE WRONG WAY', 'Every landing is running the other way.', {
   width: 5200, height: 1100, theme: 'horizontal', background: '#07283a',
   startPos: { x: 90, y: 852 }, foodPos: { x: 130, y: 852 },
   goalPos: { x: 5020, y: 700 },
   platforms: [
     solid(0, 900, 700),
-    // Landings are 200 wide, not 320, and the gaps run to 640 — a long jump
-    // manages 712 with nothing pushing back, and the wind takes a chunk of it.
-    solid(1340, 900, 200),
-    solid(2180, 900, 200),
-    solid(3020, 900, 200),
+    // Belts instead of wind. Wind pushed you in mid-air where there was
+    // nothing to see it against, so it just felt like the controls slipping.
+    // A belt does the same job while you are stood on it, and you can see
+    // which way it is going.
+    belt(1340, 900, 200, -3.4),
+    belt(2180, 900, 200, -3.4),
+    belt(3020, 900, 200, -3.4),
     solid(3860, 900, 1340),
     solid(760, 680, 520, 60),     // low ceilings: slide into the long jump
     solid(1600, 680, 520, 60),
@@ -815,9 +817,8 @@ NEW.push(level(64, 'CROSSWIND', 'The wind takes a third of every jump.', {
     laser(2280, 620, 280, { interval: 1800, offset: 600 }),
     laser(3120, 620, 280, { interval: 1800, offset: 1200 }),
   ],
-  physics: { windX: -1.6 },
   powerups: [pickup('speed', 400, 840), pickup('shield', 2340, 840)],
-  hints: [hintZone(60, 540, 'Slide, then jump. The wind is against you the whole way.', 560, 320)],
+  hints: [hintZone(60, 540, 'Slide, then jump. Every landing is dragging you back towards the gap.', 560, 320)],
 }));
 
 // 65 — doors on a cycle over conveyors, so the floor moves as well as the gaps.
@@ -904,7 +905,7 @@ NEW.push(level(67, 'DOUBLE OVERTIME', 'All of it, once more.', {
     laser(6620, 220, 280, { interval: 1500, offset: 500 }),
     laser(7000, 220, 280, { interval: 1500, offset: 1000 }),
   ],
-  physics: { wallSlideEnabled: true, windX: -1.2 },
+  physics: { wallSlideEnabled: true },
   powerups: [
     pickup('magnet', 980, 960),
     pickup('shield', 2260, 1180),

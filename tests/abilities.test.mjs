@@ -1736,3 +1736,41 @@ test('the aim grace does not bend a deliberate straight throw', () => {
     assert.ok(off < 3, `${dir} threw ${angle.toFixed(0)}deg, wanted ${want}`);
   }
 });
+
+test('a car you step out of in mid-air falls instead of hanging there', () => {
+  // A ridden vehicle has its position written from the player's every frame.
+  // Stepping out simply stopped that, so the car was left hanging wherever you
+  // abandoned it.
+  const level = fixture({
+    width: 6000, height: 1200,
+    startPos: { x: 200, y: 852 }, foodPos: { x: 240, y: 852 },
+    goalPos: { x: 5800, y: 870 },
+    vehicles: [{ id: 'v', type: 'car', pos: { x: 300, y: 860 }, width: 80, height: 40 }],
+    platforms: [
+      { x: 0, y: 900, width: 1500, height: 300, type: 'static' },
+      { x: 0, y: 1150, width: 6000, height: 50, type: 'static' },
+    ],
+  });
+  const { game } = boot(level);
+  advance(4);
+  keys.down('KeyD');
+  advance(60);                       // board and drive
+  keys.down('Space');
+  advance(10);
+  keys.up('Space');
+  advance(6);                        // airborne
+
+  const car = game.level.vehicles[0];
+  const leftAt = car.y;
+  tap('KeyQ');                       // step out over the drop
+  for (let i = 0; i < 200; i++) advance(1);
+  keys.up('KeyD');
+
+  const restingOn = game.level.platforms.find(pl =>
+    Math.abs((car.y + car.height) - pl.y) < 2);
+  game.destroy();
+
+  assert.ok(car.y > leftAt + 40,
+    `the car should have fallen, went from ${leftAt.toFixed(0)} to ${car.y.toFixed(0)}`);
+  assert.ok(restingOn, 'and come to rest on something');
+});

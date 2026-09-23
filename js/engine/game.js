@@ -330,6 +330,7 @@ export class Game {
     this.#stepPlayer();
     this.#stepFood();
     this.#stepPickups();
+    this.#stepLooseVehicles();
     this.#stepHazards();
     // The look-ahead walks the bag's whole arc against every platform, so it
     // runs a few times a second rather than every frame.
@@ -1378,6 +1379,43 @@ export class Game {
     }
   }
 
+  /**
+   * Gravity for a vehicle nobody is in.
+   *
+   * While you ride one its position is written from yours every frame, and
+   * when you step out that simply stops — so a car abandoned in mid-air hung
+   * there. Now it falls and lands, which also means you can leave one on a
+   * ledge and come back to it where you would expect.
+   */
+  #stepLooseVehicles() {
+    const solids = this.#solidPlatforms();
+    const gravity = PHYSICS.gravity * this.level.physics.gravityScale;
+
+    for (const v of this.level.vehicles) {
+      if (v.inUse) continue;
+
+      v.vy = Math.min((v.vy ?? 0) + gravity, this.loadout.terminalVelocity);
+      if (v.vy === 0) continue;
+
+      // Sub-stepped for the same reason the player is: a fast fall should not
+      // skip straight through a thin ledge.
+      const steps = Math.max(1, Math.ceil(v.vy / 8));
+      const inc = v.vy / steps;
+      for (let i = 0; i < steps; i++) {
+        v.y += inc;
+        const under = solids.find(plat => overlaps(v, plat));
+        if (under) { v.y = under.y - v.height; v.vy = 0; break; }
+      }
+
+      // Anything that falls out of the level is put back on its floor rather
+      // than left to accelerate forever.
+      if (v.y > this.level.height) {
+        v.y = this.level.height - v.height;
+        v.vy = 0;
+      }
+    }
+  }
+
   // --- pickups & vehicles --------------------------------------------------
 
   #stepPickups() {
@@ -2122,18 +2160,24 @@ export class Game {
   #drawConveyorArrows(ctx, plat) {
     const dir = Math.sign(plat.conveyorVel);
     const offset = (this.worldTime * 0.03 * dir) % 40;
+
+    // The arrows mark the surface you stand on, so they stay in a band at the
+    // top however deep the block is. Centring them on the platform's height
+    // put them 153px down the face of a belt that terrain had grown into a
+    // 306px slab, where they meant nothing.
+    const band = Math.min(20, plat.height);
     ctx.save();
     ctx.beginPath();
-    ctx.rect(plat.x, plat.y, plat.width, plat.height);
+    ctx.rect(plat.x, plat.y, plat.width, band);
     ctx.clip();
     ctx.fillStyle = COLORS.conveyor;
     ctx.globalAlpha = 0.55;
     for (let x = plat.x - 40; x < plat.x + plat.width + 40; x += 40) {
       const ax = x + offset;
       ctx.beginPath();
-      ctx.moveTo(ax, plat.y + 4);
-      ctx.lineTo(ax + 12 * dir, plat.y + plat.height / 2);
-      ctx.lineTo(ax, plat.y + plat.height - 4);
+      ctx.moveTo(ax, plat.y + 3);
+      ctx.lineTo(ax + 12 * dir, plat.y + band / 2);
+      ctx.lineTo(ax, plat.y + band - 3);
       ctx.fill();
     }
     ctx.restore();

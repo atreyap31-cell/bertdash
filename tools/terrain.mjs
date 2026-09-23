@@ -72,7 +72,9 @@ const touched = [];
 
 for (const level of levels.value) {
   const solid = level.platforms.filter(p => isSolidType(p.type) && p.type !== 'moving');
-  const bars = solid.filter(p => p.height <= THIN && p.width >= 80);
+  // Belts keep their thin profile: a conveyor grown into a slab stops reading
+  // as a conveyor, and the arrows have nowhere sensible to sit.
+  const bars = solid.filter(p => p.height <= THIN && p.width >= 80 && !p.conveyorVel);
   if (bars.length < 3) continue;
 
   const before = JSON.stringify(level.platforms);

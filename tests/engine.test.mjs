@@ -540,3 +540,24 @@ test('a lift cannot carry you into a ceiling', () => {
   game.destroy();
   assert.equal(worst, 0, `the lift pushed its rider ${worst.toFixed(0)}px into the ceiling`);
 });
+
+test('a level that hands you a car gets a par paced for driving', () => {
+  // On foot par assumes 170px a second, which is a third of walking pace and
+  // deliberately slack. A car does 1,080 and 1,680 boosting, so the same
+  // figure gave a 9,000px road a par of 53 seconds for something you can drive
+  // in twenty.
+  const base = {
+    ...fixture(),
+    width: 9000, height: 1200,
+    startPos: { x: 100, y: 800 }, goalPos: { x: 8800, y: 820 },
+  };
+  const onFoot = computeParTime(prepareLevel({ ...base, vehicles: [] }));
+  const driving = computeParTime(prepareLevel({
+    ...base,
+    vehicles: [{ id: 'v', type: 'car', pos: { x: 300, y: 800 }, width: 80, height: 40 }],
+  }));
+
+  assert.ok(driving < onFoot * 0.6,
+    `driving par (${driving}s) should be far tighter than on foot (${onFoot}s)`);
+  assert.ok(driving > 6, 'but still a real time, not the floor');
+});
