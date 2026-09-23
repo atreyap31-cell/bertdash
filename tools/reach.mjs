@@ -21,6 +21,13 @@ export const MOVES = [
   { name: 'dive',            rise: 148, gap: 816, bag: false, key: 'dive' },
   { name: 'bag bounce',      rise: 320, gap: 416, bag: true, key: 'bag' },
   { name: 'bag bounce + air',rise: 320, gap: 695, bag: true, key: 'bag' },
+
+  // Measured off a ledge in the engine (tools notes in build-levels.mjs): a
+  // boosted bike carries 1,233px and a boosted car 1,686px, against 402px on
+  // foot. Held at about 85% of that here, and only offered on a level that
+  // actually has a vehicle in it.
+  { name: 'bike + boost',     rise: 200, gap: 1040, bag: false, key: 'vehicle', vehicle: true },
+  { name: 'car + boost',      rise: 100, gap: 1430, bag: false, key: 'vehicle', vehicle: true },
 ];
 
 export const FALL_GAP = 760;     // how far you can drift sideways on the way down
@@ -173,6 +180,7 @@ export function wallBetween(level, a, b) {
  *   is to model exactly what a player can do on foot.
  */
 export function canReach(level, from, to, opts = {}) {
+  const driveable = (level.vehicles?.length ?? 0) > 0;
   const useBag = opts.bag !== false;
   const gap = spanGap(from, to);
   const rise = from.yTop - to.yBottom;
@@ -189,6 +197,7 @@ export function canReach(level, from, to, opts = {}) {
 
   return MOVES.some(m =>
     (useBag || !m.bag)
+    && (!m.vehicle || driveable)
     && opts[m.key] !== false
     && rise + MARGIN <= m.rise * riseScale
     && gap + MARGIN <= m.gap);

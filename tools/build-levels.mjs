@@ -420,11 +420,15 @@ NEW.push(level(51, 'FREE FALL', 'Down is the easy direction. Mind the edges.', {
   goalPos: { x: 450, y: 3420 },
   platforms: [
     solid(300, 340, 300, 40),
+    // Spikes on part of each shelf, never all of it. Covering the whole thing
+    // left nowhere to land for 3,100px: measured, the 260px between rows buys
+    // about 430px of sideways reach and threading the slots needed 520.
+    // The clear strip sits under the lip you step off above it.
     ...Array.from({ length: 11 }, (_, i) => {
       const y = 600 + i * 260;
       return i % 2 === 0
-        ? [ledge(0, y, 520), spikes(0, y - 20, 520)]
-        : [ledge(380, y, 520), spikes(380, y - 20, 520)];
+        ? [ledge(0, y, 520), spikes(420, y - 20, 100)]     // land 0-420
+        : [ledge(380, y, 520), spikes(380, y - 20, 100)];  // land 480-900
     }).flat(),
     solid(0, 3470, 900, 130),
   ],
@@ -653,7 +657,9 @@ NEW.push(level(59, 'TERMINAL VELOCITY', 'Down, fast, through all of it.', {
       const left = i % 2 === 0;
       return [
         ledge(left ? 0 : 560, y, 440),
-        spikes(left ? 0 : 560, y - 20, 440),
+        // Outer half only: you come down the middle of the shaft, so the inner
+        // half of every shelf stays landable.
+        spikes(left ? 0 : 760, y - 20, 240),
         ...(i % 3 === 2
           ? [laser(left ? 520 : 440, y - 260, 240, { interval: 1700, offset: i * 240 })]
           : []),
@@ -901,6 +907,134 @@ NEW.push(level(67, 'DOUBLE OVERTIME', 'All of it, once more.', {
     pickup('speed', 4740, 840),
   ],
   hints: [hintZone(60, 920, 'Overtime. Everything you have learned, back to back.', 560, 340)],
+}));
+
+// --- the road ---------------------------------------------------------------
+//
+// Three of sixty-eight levels had a vehicle in them, which is a waste of the
+// best movement in the game. These are built around it.
+//
+// Measured off the same ledge, in the engine:
+//
+//   on foot                      402px
+//   bike                         809px
+//   bike + boost               1,233px
+//   car                        1,017px
+//   car + boost                1,686px
+//   car + boost, eject mid-air 1,728px
+//
+// So a 1,200px chasm is a boost gap, and a 1,500px one is car-and-boost or
+// nothing. Ejecting keeps every bit of your speed — the engine never touched
+// horizontal velocity on dismount — so stepping out at 28px/frame and throwing
+// puts the bag further than any standing throw can reach.
+
+// 68 — a road with holes in it. Boost or fall.
+NEW.push(level(68, 'RING ROAD', 'Boost the gaps. The car does not jump far on its own.', {
+  width: 9000, height: 1200, theme: 'horizontal', background: '#101725',
+  startPos: { x: 120, y: 802 }, foodPos: { x: 160, y: 802 },
+  goalPos: { x: 8760, y: 780 },
+  platforms: [
+    solid(0, 850, 1900, 350),
+    solid(3150, 850, 1500, 350),      // 1250 gap: boost
+    solid(6050, 850, 1300, 350),      // 1400 gap: boost
+    solid(8350, 850, 650, 350),       // 1000 gap: the car alone just makes it
+    spikes(1900, 1180, 1250),
+    spikes(4650, 1180, 1400),
+    spikes(7350, 1180, 1000),
+  ],
+  vehicles: [ride('car', 400, 810), ride('car', 3400, 810), ride('car', 6300, 810)],
+  powerups: [pickup('shield', 900, 790), pickup('speed', 3700, 790)],
+  hints: [
+    hintZone(60, 480, 'Get in the car. <b>Shift</b> boosts — you need it for these.', 560, 320),
+    hintZone(3200, 480, 'The boost recharges. Wait for it rather than driving off the edge.', 560, 320),
+  ],
+}));
+
+// 69 — the eject. A car cannot land on the high shelf, but you can, if you step
+//      out of it in mid-air carrying its speed.
+NEW.push(level(69, 'EJECT', 'Step out of the car in mid-air. Keep the speed.', {
+  width: 7000, height: 1400, theme: 'horizontal', background: '#0a1a1a',
+  startPos: { x: 120, y: 1002 }, foodPos: { x: 160, y: 1002 },
+  goalPos: { x: 6800, y: 500 },
+  platforms: [
+    solid(0, 1050, 2400, 350),
+    // 900 across and only 130 up: a boosted car clears the gap, and the shelf
+    // is low enough that its jump actually reaches.
+    solid(3300, 920, 420, 380),
+    // From there it is 190 up, which no vehicle jumps — you have to be out of
+    // it and air-jumping by now.
+    ledge(4200, 730, 420),
+    solid(5200, 1050, 900, 350),
+    solid(6350, 560, 650, 840),
+    spikes(2400, 1380, 900),
+    spikes(3720, 1380, 480),
+    spikes(4620, 1380, 580),
+    spikes(6100, 1380, 250),
+  ],
+  vehicles: [ride('car', 500, 1010), ride('bike', 5400, 1010)],
+  powerups: [pickup('magnet', 3400, 640), pickup('shield', 5600, 990)],
+  hints: [
+    hintZone(60, 620, 'Boost, jump, then <b>Q</b> in mid-air. You keep the car\u2019s speed.', 580, 340),
+    hintZone(5250, 620, 'Same again, on the bike, to reach Bert.', 540, 320),
+  ],
+}));
+
+// 70 — bike work: lighter, jumps higher, boosts shorter.
+NEW.push(level(70, 'THE COURIER LANE', 'A bike jumps where a car cannot.', {
+  width: 7800, height: 1300, theme: 'horizontal', background: '#1c1233',
+  startPos: { x: 120, y: 952 }, foodPos: { x: 160, y: 952 },
+  goalPos: { x: 7600, y: 560 },
+  platforms: [
+    solid(0, 1000, 1500, 300),
+    solid(2600, 1000, 900, 300),      // 1100: bike and boost
+    solid(4500, 820, 700, 480),
+    solid(6200, 620, 1600, 680),
+    ledge(3700, 700, 300),
+    ledge(5400, 560, 300),
+    spikes(1500, 1280, 1100),
+    spikes(3500, 1280, 1000),
+    spikes(5200, 1280, 1000),
+    laser(2900, 700, 300, { interval: 1700, offset: 0 }),
+    laser(4700, 520, 300, { interval: 1700, offset: 600 }),
+  ],
+  vehicles: [ride('bike', 400, 960), ride('bike', 2800, 960)],
+  powerups: [pickup('speed', 800, 940), pickup('shield', 4700, 780)],
+  hints: [
+    hintZone(60, 560, 'The bike is slower but jumps far higher. Boost is <b>Shift</b>.', 560, 320),
+  ],
+}));
+
+// 71 — the finale: drive, boost, eject, and throw on the speed you stole from
+//      the car, because Bert is further than any standing throw reaches.
+NEW.push(level(71, 'THE INTERCHANGE', 'Everything the road gives you.', {
+  width: 10000, height: 1500, theme: 'horizontal', background: '#0d0d18',
+  startPos: { x: 120, y: 1102 }, foodPos: { x: 160, y: 1102 },
+  goalPos: { x: 9700, y: 640 },
+  platforms: [
+    solid(0, 1150, 2000, 350),
+    solid(3300, 1150, 1400, 350),     // 1300: boost
+    solid(6000, 1150, 1200, 350),     // 1300: boost
+    solid(7900, 1010, 500, 490),      // 140 up: a boosted car lands it
+    ledge(8700, 840, 300),            // 170 up: on foot, air jumping
+    solid(9300, 700, 700, 800),       // Bert, 140 up and 300 across
+
+    spikes(2000, 1480, 1300),
+    spikes(4700, 1480, 1300),
+    spikes(7200, 1480, 700),
+    laser(3500, 850, 300, { interval: 1500, offset: 0 }),
+    laser(6200, 850, 300, { interval: 1500, offset: 700 }),
+  ],
+  vehicles: [ride('car', 400, 1110), ride('car', 3600, 1110), ride('car', 6300, 1110)],
+  powerups: [
+    pickup('shield', 900, 1090),
+    pickup('speed', 3900, 1090),
+    pickup('magnet', 8000, 840),
+  ],
+  hints: [
+    hintZone(60, 720, 'Last run. Boost the chasms, eject for the high ground.', 560, 340),
+    hintZone(7950, 480, 'Bert is out of reach on foot. Step out of the car fast and '
+      + 'throw on that speed \u2014 a throw carries whatever you are carrying.', 560, 380),
+  ],
   isFinalLevel: true,
 }));
 

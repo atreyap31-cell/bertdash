@@ -165,3 +165,20 @@ and leaves that zone clear.
 node tools/unspike.mjs          # dry run
 node tools/unspike.mjs --write
 ```
+
+## `terrain.mjs`
+
+Turns floating bars into terrain. Forty of the campaign's levels were a row of
+thin ledges hanging in empty space, which is why so many looked like the same
+level.
+
+It only ever extends a platform *downward*, so its standable top stays exactly
+where the author put it and every jump, gap and route is untouched — the bar
+just becomes a mesa, a pillar or a building. Anything that would swallow a
+hazard, land on the spawn, the bag or Bert, or collide with what is below it is
+left alone, and the campaign is re-checked for solvability before writing.
+
+```bash
+node tools/terrain.mjs          # dry run
+node tools/terrain.mjs --write
+```

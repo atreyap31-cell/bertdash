@@ -211,3 +211,24 @@ test('no platform is entirely covered by something lethal', () => {
   }
   assert.deepEqual(problems, [], `\n${problems.slice(0, 10).join('\n')}`);
 });
+
+test('every level that hands you a vehicle can still be finished in it', () => {
+  // Vehicle levels gate their chasms behind a boost — 1,430px of car-and-boost
+  // against 1,139px for the best jump on foot. The route search only offers
+  // those moves on a level that actually has something to drive, so a level
+  // that lost its vehicles would quietly become impossible.
+  const problems = [];
+  for (const raw of ALL) {
+    if (!(raw.vehicles ?? []).length) continue;
+    const onFoot = analyse({ ...raw, vehicles: [] });
+    const withRide = analyse(raw);
+    if (!withRide.ok) {
+      problems.push(`level ${raw.id} "${raw.title}" is unfinishable even with its vehicles`);
+    }
+    // Not a requirement, just recorded: some of these are meant to need it.
+    if (!onFoot.ok && !withRide.ok) {
+      problems.push(`level ${raw.id} "${raw.title}" is unfinishable either way`);
+    }
+  }
+  assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
+});
