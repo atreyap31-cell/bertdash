@@ -1,11 +1,13 @@
 {
   "name": "bertdash",
   "version": "1.0.0",
-  "description": "A browser platformer about delivering a takeaway bag across 34 hand-built levels.",
+  "description": "A browser platformer about delivering a takeaway bag across 71 levels.",
   "type": "module",
   "private": true,
   "scripts": {
     "test": "node tools/run-tests.mjs",
+    "//levels": "Regenerating from build-levels alone drops the repair passes that run after it, which has twice shipped a broken level. Always rebuild with this.",
+    "levels": "node tools/build-levels.mjs --write && node tools/unoverlap.mjs --write && node tools/unspike.mjs --write && node tools/terrain.mjs --write",
     "start": "npx --yes http-server . -p 8080 -c-1"
   },
   "license": "MIT"

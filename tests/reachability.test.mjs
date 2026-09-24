@@ -232,3 +232,47 @@ test('every level that hands you a vehicle can still be finished in it', () => {
   }
   assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
 });
+
+test('a shaft with a lid across the top is not solvable, whatever the heights say', () => {
+  // THE SHAFT as it shipped. Every stage of the climb was within reach and the
+  // surface Bert stands on was a real surface, so the search called it fine —
+  // three times. What it never asked was whether you could get past the slab
+  // you were climbing to. The walls stopped at y=300 and the slab's underside
+  // was at y=290, leaving a 10px slot as the only way out of the channel. The
+  // courier is 48px tall.
+  const lidded = {
+    id: 'lidded', title: 'Lidded', width: 800, height: 3000,
+    background: '#000', theme: 'vertical', physics: { wallSlideEnabled: true },
+    vehicles: [], powerups: [], hints: [],
+    startPos: { x: 360, y: 2870 }, foodPos: { x: 400, y: 2870 },
+    goalPos: { x: 400, y: 200 },
+    platforms: [
+      { x: 0, y: 2920, width: 800, height: 80, type: 'static' },
+      { x: 150, y: 300, width: 60, height: 2620, type: 'static' },
+      { x: 590, y: 300, width: 60, height: 2620, type: 'static' },
+      { x: 250, y: 2300, width: 300, height: 20, type: 'static' },
+      { x: 250, y: 1500, width: 300, height: 20, type: 'static' },
+      { x: 250, y: 700, width: 300, height: 20, type: 'static' },
+      { x: 200, y: 250, width: 400, height: 40, type: 'static' },
+    ],
+  };
+  assert.equal(analyse(lidded).ok, false,
+    'a channel sealed by the goal platform should be reported unfinishable');
+
+  // The landings were the other half of it: 300px bars in a 380px channel left
+  // 40px to thread past, against a 32px body. Widening the top alone is not
+  // enough, and the check says so.
+  const openTopOnly = {
+    ...lidded,
+    platforms: lidded.platforms.map(q =>
+      (q.y === 250 ? { ...q, x: 330, width: 270 } : q)),
+    goalPos: { x: 470, y: 200 },
+  };
+  assert.equal(analyse(openTopOnly).ok, false,
+    'opening the top does not help while the landings still seal the channel');
+
+  // What ships now: landings that alternate sides leaving a 100px opening, and
+  // a top platform that hangs beside the exit rather than over it.
+  assert.equal(analyse(LEVELS[35]).ok, true,
+    `level 35 "${LEVELS[35].title}" must be finishable`);
+});

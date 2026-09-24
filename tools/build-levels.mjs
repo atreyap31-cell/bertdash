@@ -82,18 +82,33 @@ NEW.push(level(34, 'DOUBLE SHIFT', 'Two jumps. You will need both.', {
 }));
 
 // 35 — a shaft climbed on wall kicks alone.
+// 35 — the climb. Rebuilt twice, and both times for the same reason: a shaft
+// is only a shaft if there is room in it.
+//
+// The old top was a 400px slab laid straight across a 380px channel with Bert
+// on top, joined to the climb by the 10px slot between the wall tops and the
+// slab's underside. The courier is 48px tall, so the level could not be
+// finished at all. The landings were nearly as bad — 300px bars in a 380px
+// channel left 40px to thread, against a 32px body.
+//
+// Now the landings alternate sides and jut out of the wall they belong to,
+// each leaving a 100px opening on the other side, and the shaft is open at the
+// top: Bert's platform hangs to the right of the exit, so the last kick takes
+// you out of the channel rather than into a ceiling. Five stages of about
+// 600px each, against a measured wall-climb limit near 800.
 NEW.push(level(35, 'THE SHAFT', 'Kick off the walls. Do not look down.', {
   width: 800, height: 3000, theme: 'vertical', background: '#0f172a',
   startPos: { x: 360, y: 2870 }, foodPos: { x: 400, y: 2870 },
-  goalPos: { x: 400, y: 200 },
+  goalPos: { x: 470, y: 200 },
   platforms: [
     solid(0, 2920, 800, 80),
     wall(150, 300, 2620, 60),
     wall(590, 300, 2620, 60),
-    ledge(250, 2300, 300),
-    ledge(250, 1500, 300),
-    ledge(250, 700, 300),
-    solid(200, 250, 400, 40),
+    ledge(210, 2300, 280),
+    ledge(310, 1700, 280),
+    ledge(210, 1100, 280),
+    ledge(310, 500, 280),
+    solid(330, 250, 270, 40),
   ],
   physics: { wallSlideEnabled: true },
 }));

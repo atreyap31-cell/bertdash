@@ -157,6 +157,61 @@ function narrowestGap(level, from, to) {
   return narrowest;
 }
 
+/**
+ * Climbing to a surface means getting on top of it, which means getting around
+ * its edge. This asks whether there is room to.
+ *
+ * THE SHAFT ended in a 400px slab laid across a 380px shaft, with Bert sitting
+ * on top of it. The climb was fine, the landing surface was fine, and the two
+ * were joined by a ten-pixel slot between the tops of the walls and the
+ * underside of the slab. The courier is 48px tall. Nobody could finish that
+ * level, and the search called it solvable three separate times, because it
+ * only ever asked "can you get that high" and never "is the way out blocked by
+ * the very thing you are climbing to".
+ *
+ * Only shafts are judged: without walls either side there is open air to swing
+ * around through, and the search has other routes to try.
+ */
+function sealedFromBelow(level, from, to) {
+  const piece = to.piece;
+  if (!piece || piece.height == null) return false;
+  const top = piece.y;
+  const bottom = piece.y + piece.height;
+
+  // Walls that form the shaft. Looked for a little below the slab as well as
+  // beside it, because a shaft's walls typically stop at the lid rather than
+  // carrying on past it.
+  const walls = level.platforms.filter(q =>
+    isSolidType(q.type) && q.height > 100
+    && q.y < bottom + 140 && q.y + q.height > top);
+  const mid = (Math.min(from.x1, to.x1) + Math.max(from.x2, to.x2)) / 2;
+  const left = walls.filter(q => q.x + q.width <= mid)
+    .reduce((best, q) => Math.max(best, q.x + q.width), -Infinity);
+  const right = walls.filter(q => q.x >= mid)
+    .reduce((best, q) => Math.min(best, q.x), Infinity);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
+
+  // Anything solid across the slab's own height band, including the slab.
+  for (let y = top; y <= bottom; y += 8) {
+    const blocked = level.platforms
+      .filter(q => q !== from.piece)
+      .filter(q => isSolidType(q.type) && q.y <= y && q.y + q.height >= y
+        && q.x + q.width > left && q.x < right)
+      .map(q => [Math.max(left, q.x), Math.min(right, q.x + q.width)])
+      .sort((a, b) => a[0] - b[0]);
+
+    let cursor = left;
+    let widest = 0;
+    for (const [a, b] of blocked) {
+      widest = Math.max(widest, a - cursor);
+      cursor = Math.max(cursor, b);
+    }
+    widest = Math.max(widest, right - cursor);
+    if (widest < SQUEEZE) return true;
+  }
+  return false;
+}
+
 export function spanGap(a, b) {
   if (a.x2 < b.x1) return b.x1 - a.x2;
   if (b.x2 < a.x1) return a.x1 - b.x2;
@@ -189,6 +244,11 @@ export function canReach(level, from, to, opts = {}) {
   const riseScale = 1 / gravity;
 
   if (rise <= 0) return gap <= Math.max(FALL_GAP, Math.max(...MOVES.map(m => m.gap)));
+
+  // No move of any kind gets you on top of something that is lidding the shaft
+  // you are in.
+  if (sealedFromBelow(level, from, to)) return false;
+
   if (opts.wallClimb !== false
       && rise <= WALL_CLIMB * riseScale && wallBetween(level, from, to) && gap <= 420) {
     // A shaft you cannot fit up is not a route.

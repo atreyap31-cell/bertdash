@@ -1842,3 +1842,52 @@ test('Second Wind is priced against how much of a level it opens up', async () =
   assert.ok(w.perPercent < h.perPercent,
     'but it should stay the best value in the tier');
 });
+
+test('THE SHAFT can actually be climbed, by a bot, in the real engine', async () => {
+  // The structural check is a model, and this level got past it three times
+  // while being physically impossible: a 400px slab across a 380px channel,
+  // joined to the climb by the 10px slot between the wall tops and the slab's
+  // underside. So this one does not ask a model anything. It drives the engine.
+  const { LEVELS } = await import('../js/data/levels.js');
+  const level = LEVELS[35];
+  assert.equal(level.title, 'THE SHAFT');
+
+  resetClock();
+  let delivered = false;
+  const game = new Game(makeCanvas(), level, {
+    skin: { color: '#06c167', textColor: '#fff' },
+    onWin: () => { delivered = true; },
+    onLose: () => {}, onStats: () => {},
+  });
+  game.start();
+  advance(30);
+
+  const p = game.player;
+  let highest = p.y;
+  let lastKick = -99;
+  for (let f = 0; f < 4200 && !delivered; f++) {
+    // Hug the nearer wall and kick the moment the cling engages; once above
+    // the wall tops there is nothing left to kick off, so walk to Bert.
+    const out = p.y < 320;
+    const left = out ? p.x > level.goalPos.x : p.x < level.width / 2;
+    keys.up(left ? 'KeyD' : 'KeyA');
+    keys.down(left ? 'KeyA' : 'KeyD');
+
+    if (p.grounded) {
+      keys.down('Space'); advance(out ? 3 : 13); keys.up('Space');
+    } else if (p.wallSliding && f - lastKick > 4) {
+      lastKick = f;
+      keys.down('Space'); advance(1); keys.up('Space'); advance(6);
+    }
+    advance(1);
+    highest = Math.min(highest, p.y);
+  }
+  ['KeyA', 'KeyD', 'Space'].forEach(k => keys.up(k));
+  game.destroy();
+
+  // Run against the shipped geometry this bot tops out at y=290, dead against
+  // the underside of the lid, and never delivers.
+  assert.ok(delivered,
+    `the bag never reached Bert; the climb stalled at y=${Math.round(highest)} `
+    + `and Bert's platform tops out at ${level.goalPos.y + 50}`);
+});
