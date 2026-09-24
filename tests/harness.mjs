@@ -41,6 +41,8 @@ function makeContext() {
     fillRect: record('fillRect'), strokeRect: record('strokeRect'), clearRect: record('clearRect'),
     beginPath: record('beginPath'), closePath: record('closePath'),
     moveTo: record('moveTo'), lineTo: record('lineTo'), arc: record('arc'), rect: record('rect'),
+    quadraticCurveTo: record('quadraticCurveTo'), bezierCurveTo: record('bezierCurveTo'),
+    ellipse: record('ellipse'), arcTo: record('arcTo'),
     fill: record('fill'), stroke: record('stroke'), clip: record('clip'),
     fillText: record('fillText'), setLineDash: record('setLineDash'),
     createLinearGradient: () => ({ addColorStop: noop }),
@@ -127,6 +129,7 @@ function makeNullContext() {
     'save', 'restore', 'translate', 'rotate', 'scale', 'setTransform', 'ellipse',
     'fillRect', 'strokeRect', 'clearRect', 'beginPath', 'closePath',
     'moveTo', 'lineTo', 'arc', 'rect', 'fill', 'stroke', 'clip',
+    'quadraticCurveTo', 'bezierCurveTo', 'ellipse', 'arcTo',
     'fillText', 'setLineDash',
   ]) ctx[name] = noop;
   return ctx;

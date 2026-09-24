@@ -6,6 +6,7 @@
 
 import { PHYSICS, resolveLoadout, COLORS, FLOW, POWERUP_BY_ID, DEFAULT_BINDINGS, AIM_ACTIONS, SIM_STEP, STEP_EPSILON, MAX_FRAME_MS, VIEW_W, VIEW_H } from '../data/config.js';
 import { prepareLevel, isSolidType, clamp } from './level.js';
+import { orderFor } from './orders.js';
 import { audio } from '../services/audio.js';
 import { backdropFor } from './backdrop.js';
 
@@ -162,6 +163,8 @@ export class Game {
       buffs: { speed: 0, jump: 0, shield: 0, magnet: 0 },
       wallSlideCredited: false,
     };
+    // Fixed per level, so a level always sends you out with the same thing.
+    this.order = orderFor(this.level);
     this.food = {
       x: this.level.foodPos.x,
       y: this.level.foodPos.y,
@@ -2395,13 +2398,8 @@ export class Game {
     ctx.translate(f.x + f.size / 2, f.y + f.size / 2 + bob);
     if (f.airborne) ctx.rotate(this.worldTime / 120);
 
-    // Takeaway bag
-    ctx.fillStyle = '#d97706';
-    ctx.fillRect(-f.size / 2, -f.size / 2, f.size, f.size);
-    ctx.fillStyle = '#b45309';
-    ctx.fillRect(-f.size / 2, -f.size / 2, f.size, 6);
-    ctx.fillStyle = '#fde68a';
-    ctx.fillRect(-5, -2, 10, 9);
+    // Whatever this level sends you out with — see js/engine/orders.js.
+    this.order.draw(ctx, f.size);
     ctx.restore();
 
     if (f.airborne) {

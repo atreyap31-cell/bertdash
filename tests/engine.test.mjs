@@ -561,3 +561,49 @@ test('a level that hands you a car gets a par paced for driving', () => {
     `driving par (${driving}s) should be far tighter than on foot (${onFoot}s)`);
   assert.ok(driving > 6, 'but still a real time, not the floor');
 });
+
+test('every order draws, with colours the canvas will actually accept', async () => {
+  const { ORDERS, orderFor } = await import('../js/engine/orders.js');
+  const { LEVELS, TRAINING } = await import('../js/data/levels.js');
+
+  // A canvas silently ignores a fillStyle it cannot parse, so a typo in a hex
+  // literal does not throw — it just draws nothing, and the item quietly loses
+  // a layer. (That is not hypothetical: the burger's sesame seeds shipped as
+  // '#eba co' for about ten minutes.) This records what is assigned instead.
+  const strokes = [];
+  const bad = [];
+  const ctx = new Proxy({}, {
+    get: (_t, key) => {
+      if (key === 'fillStyle' || key === 'strokeStyle') return '#000';
+      return (...args) => { strokes.push([key, args]); };
+    },
+    set: (_t, key, value) => {
+      if (key === 'fillStyle' || key === 'strokeStyle') {
+        if (!/^#[0-9a-f]{3}$|^#[0-9a-f]{6}$|^rgba?\(/i.test(String(value))) {
+          bad.push(`${String(value)}`);
+        }
+      }
+      return true;
+    },
+  });
+
+  for (const order of ORDERS) {
+    strokes.length = 0;
+    order.draw(ctx, 26);
+    assert.ok(strokes.length >= 3,
+      `${order.name} barely draws anything (${strokes.length} calls)`);
+  }
+  assert.deepEqual(bad, [], `unparseable colours: ${bad.join(', ')}`);
+
+  // Every level has one, it never changes between calls, and consecutive
+  // levels differ so the campaign does not run the same item twice in a row.
+  for (const level of [...LEVELS, ...TRAINING]) {
+    const order = orderFor(level);
+    assert.ok(order?.name, `level ${level.id} has no order`);
+    assert.equal(orderFor(level).id, order.id, `level ${level.id} is not stable`);
+  }
+  for (let i = 1; i < LEVELS.length; i++) {
+    assert.notEqual(orderFor(LEVELS[i]).id, orderFor(LEVELS[i - 1]).id,
+      `levels ${i - 1} and ${i} both deliver ${orderFor(LEVELS[i]).name}`);
+  }
+});
