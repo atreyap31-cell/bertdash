@@ -3,6 +3,7 @@
 import { el, modal, toast, confirmDialog, formatTime, formatMoney } from './dom.js';
 import { SKINS, GEAR, GEAR_TIERS, ACHIEVEMENTS, ACTIONS, keyName, QUOTES, FAIL_QUOTES, FAIL_LABELS } from '../data/config.js';
 import { LEVELS, TRAINING, CAMPAIGN_LENGTH } from '../data/levels.js';
+import { orderFor } from '../engine/orders.js';
 import { profile } from '../services/profile.js';
 import { listGhosts } from '../services/ghost.js';
 import { audio } from '../services/audio.js';
@@ -80,28 +81,73 @@ export function renderMenu(app) {
 export function renderLevelSelect(app) {
   const p = profile.get();
 
-  const cards = LEVELS.slice(1).map((level, index) => {
+  // Seventy-one tiles is a lot to scroll when you know the one you want.
+  // Filtering is done by hiding the cards rather than rebuilding the grid, so
+  // the field keeps focus and the caret while you type.
+  const entries = LEVELS.slice(1).map((level, index) => {
     const id = index + 1;
     const best = p.bestLevelTimes[String(id)];
     const done = best != null;
-    return el(`button.level-card${done ? '.is-done' : ''}`, {
+    const order = orderFor(level);
+    const node = el(`button.level-card${done ? '.is-done' : ''}`, {
       onclick: () => { audio.click(); app.play(id); },
     }, [
       el('span.level-card__num', String(id)),
       el('span.level-card__title', level.title),
       el('span.level-card__meta', done ? formatTime(best) : `${level.theme === 'vertical' ? 'Climb' : 'Run'}`),
     ]);
+    // Searchable text: the number, the title, and what the level has you
+    // delivering, so "shake" finds the levels that send you out with one.
+    return { id, node, hay: `${id} ${level.title} ${order.name}`.toLowerCase() };
   });
 
-  return el('div.screen', [
+  const empty = el('p.level-grid__empty', 'No levels match that.');
+  empty.hidden = true;
+  const grid = el('div.level-grid', entries.map(e => e.node));
+
+  let shown = entries;
+  const apply = query => {
+    const q = query.trim().toLowerCase();
+    // A bare number means that level, not every level containing the digit:
+    // "7" should find level 7 before it finds 17, 27 and 70.
+    const asNumber = /^\d+$/.test(q) ? Number(q) : null;
+    shown = entries.filter(e => !q
+      || (asNumber != null ? e.id === asNumber : e.hay.includes(q)));
+    // Nothing on an exact number? Fall back to a loose match so "7" still
+    // offers 17 and 27 rather than an empty grid.
+    if (!shown.length && asNumber != null) shown = entries.filter(e => e.hay.includes(q));
+    const visible = new Set(shown.map(e => e.id));
+    for (const e of entries) e.node.hidden = !visible.has(e.id);
+    empty.hidden = shown.length > 0;
+  };
+
+  const field = el('input.level-search', {
+    type: 'search',
+    placeholder: 'Search by name or number',
+    'aria-label': 'Search levels by name or number',
+    autocomplete: 'off',
+    oninput: event => apply(event.target.value),
+    onkeydown: event => {
+      if (event.key !== 'Enter') return;
+      // Enter plays the only match, which makes "35" + Enter a way in.
+      if (shown.length === 1) { audio.click(); app.play(shown[0].id); }
+    },
+  });
+
+  const screen = el('div.screen', [
     el('div.panel.panel--wide', [
       el('header.panel__head', [
         el('h2.panel__title', 'Select Zone'),
+        field,
         el('button.btn.btn--ghost', { onclick: () => app.show('menu') }, 'Back'),
       ]),
-      el('div.level-grid', cards),
+      grid,
+      empty,
     ]),
   ]);
+  // The screen is mounted after this returns, so focus has to wait a tick.
+  requestAnimationFrame(() => field.focus());
+  return screen;
 }
 
 /** Short lessons, one move each. Kept out of the campaign numbering. */

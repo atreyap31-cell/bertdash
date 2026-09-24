@@ -1326,3 +1326,32 @@ body:not(.is-booting) .boot { opacity: 0; pointer-events: none; }
   letter-spacing: 0.04em;
   color: var(--cyan);
 }
+
+/* Level search. Sits in the panel head between the title and Back, and takes
+   the space those two leave. */
+.level-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0 12px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+.level-search::placeholder { color: rgba(255, 255, 255, 0.4); }
+.level-search:focus {
+  outline: none;
+  border-color: var(--green);
+  background: rgba(255, 255, 255, 0.1);
+}
+/* `hidden` alone loses to the card's own display rule, so say it explicitly. */
+.level-card[hidden] { display: none; }
+
+.level-grid__empty {
+  margin: 18px 0 4px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
