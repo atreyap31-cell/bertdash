@@ -15,6 +15,8 @@ import { SKINS, VIEW_W, VIEW_H } from './data/config.js';
 import { profile } from './services/profile.js';
 import { encodeGhost, saveGhost, loadGhost, ghostToReel } from './services/ghost.js';
 import { audio } from './services/audio.js';
+import { music } from './services/music.js';
+import { backdropNameFor } from './engine/backdrop.js';
 
 class App {
   constructor(root) {
@@ -94,6 +96,9 @@ class App {
 
     this.root.replaceChildren(view);
     if (this.screen === 'result') this.#bindResultKeys();
+    // Every menu shares a track, and play() ignores a repeat of what is
+    // already playing, so walking the menus does not restart it each time.
+    music.menu();
   }
 
   /**
@@ -267,6 +272,7 @@ class App {
 
     canvas.focus();
     game.start();
+    music.playForBackdrop(backdropNameFor(target.level));
 
     // HUD updates ride their own rAF so the engine never touches the DOM.
     const tick = () => {
@@ -284,9 +290,11 @@ class App {
     if (this.pauseDialog) { this.pauseDialog.close(); return; }
 
     this.game.setPaused(true);
+    music.setDucked(true);
     this.pauseDialog = openPause({
       onResume: () => {
         this.pauseDialog = null;
+        music.setDucked(false);
         this.game?.setPaused(false);
       },
       onRestart: () => { this.pauseDialog = null; this.retry(); },
@@ -537,5 +545,9 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
 app.show('menu');
 document.body.classList.remove('is-booting');
 
-// Any click anywhere is enough of a gesture to let WebAudio start.
-addEventListener('pointerdown', () => audio.unlock(), { once: true });
+// Any click or keypress is enough of a gesture to let WebAudio start. Both
+// matter: someone who plays with the keyboard may never fire pointerdown, and
+// before this the music would have waited forever for them.
+const unlock = () => { audio.unlock(); music.menu(); };
+addEventListener('pointerdown', unlock, { once: true });
+addEventListener('keydown', unlock, { once: true });

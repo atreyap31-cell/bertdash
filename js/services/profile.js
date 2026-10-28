@@ -66,7 +66,7 @@ const DEFAULT_PROFILE = {
   bestLevelTimes: {},
   bestRunMs: null,       // fastest full campaign run
   attemptsPerLevel: {},
-  settings: { sound: true, reducedFlash: false, speedrun: false, showInputs: false, screenShake: true, replays: true, ghost: true },
+  settings: { sound: true, music: true, reducedFlash: false, speedrun: false, showInputs: false, screenShake: true, replays: true, ghost: true },
   bindings: {},
   stats: { ...DEFAULT_STATS },
 };

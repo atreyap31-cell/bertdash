@@ -76,6 +76,22 @@ class AudioService {
     source.start();
   }
 
+  /**
+   * A second output, for music.
+   *
+   * Deliberately not routed through #master: music has its own setting and
+   * its own level, so muting the effects must not mute it (or vice versa).
+   * It shares the context because browsers cap how many a page may open.
+   */
+  bus(gain = 0.1) {
+    const ctx = this.#ensure();
+    if (!ctx) return null;
+    const node = ctx.createGain();
+    node.gain.value = gain;
+    node.connect(ctx.destination);
+    return { ctx, node };
+  }
+
   /** Rate-limit an effect so a per-frame trigger doesn't machine-gun. */
   #throttled(key, ms, fn) {
     const now = performance.now();

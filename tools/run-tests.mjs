@@ -34,6 +34,7 @@ const SUITES = [
   // Split in two on purpose: each process carries half the fuzzing.
   'fuzz', 'fuzz-geometry',
   'profile',
+  'music',
 ];
 
 /** How many times a crashing suite is re-run before the whole thing fails. */

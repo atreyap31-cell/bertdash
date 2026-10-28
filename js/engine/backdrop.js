@@ -326,26 +326,35 @@ const OUTDOORS = new Set([18, 19, 21]);
  * still gets something with movement in it.
  */
 export function backdropFor(level) {
-  if (level.backdrop && BACKDROPS[level.backdrop]) return BACKDROPS[level.backdrop];
+  return BACKDROPS[backdropNameFor(level)] ?? city;
+}
+
+/**
+ * The same choice, as a name. The music picks its track from this, so what
+ * you hear matches what you are looking at — and so the two can never drift,
+ * which they would if each had its own copy of the mapping.
+ */
+export function backdropNameFor(level) {
+  if (level.backdrop && BACKDROPS[level.backdrop]) return level.backdrop;
 
   const id = typeof level.id === 'number' ? level.id : null;
-  if (id == null) return level.theme === 'vertical' ? tower : city;
+  if (id == null) return level.theme === 'vertical' ? 'tower' : 'city';
 
   // A few of these are outdoors despite sitting in the tower act. A roof
   // garden and a skybridge are not rooms, and giving them an interior put a
   // grid of columns across a bright green and a bright cyan.
-  if (OUTDOORS.has(id)) return clouds;
+  if (OUTDOORS.has(id)) return 'sky';
 
-  if (id <= 9) return city;
-  if (id <= 15) return industrial;
-  if (id <= 21) return tower;
-  if (id <= 23) return clouds;
-  if (id <= 30) return space;
-  if (id <= 33) return cyber;
+  if (id <= 9) return 'city';
+  if (id <= 15) return 'industrial';
+  if (id <= 21) return 'tower';
+  if (id <= 23) return 'sky';
+  if (id <= 30) return 'space';
+  if (id <= 33) return 'cyber';
 
   // The later run mixes acts, so pick by shape and position rather than
   // pretending the ordering still tells a story.
-  const order = [city, industrial, tower, clouds, space, cyber];
+  const order = ['city', 'industrial', 'tower', 'sky', 'space', 'cyber'];
   return order[id % order.length];
 }
 

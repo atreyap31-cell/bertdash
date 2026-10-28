@@ -7,6 +7,7 @@ import { orderFor } from '../engine/orders.js';
 import { profile } from '../services/profile.js';
 import { listGhosts } from '../services/ghost.js';
 import { audio } from '../services/audio.js';
+import { music } from '../services/music.js';
 import { peer, readCodeKind } from '../services/net.js';
 
 const pick = list => list[Math.floor(Math.random() * list.length)];
@@ -596,6 +597,21 @@ export function openSettings(app) {
   const body = el('div.settings', [
     el('label.field', [el('span.field__label', 'Courier name'), nameInput]),
     toggle('Sound effects', 'sound', 'Synthesised in the browser — no audio files to download'),
+    el('label.setting', [
+      el('input', {
+        type: 'checkbox',
+        checked: p.settings.music !== false,
+        onchange: event => {
+          profile.setSetting('music', event.target.checked);
+          music.refresh();   // takes effect now, not on the next reload
+        },
+      }),
+      el('div', [
+        el('span.setting__label', 'Music'),
+        el('span.setting__hint',
+          'One track per backdrop, synthesised the same way. Separate from effects'),
+      ]),
+    ]),
     el('label.setting', [
       el('input', {
         type: 'checkbox',
